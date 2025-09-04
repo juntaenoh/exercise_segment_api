@@ -1,0 +1,19 @@
+# Podfile for iOS Example
+platform :ios, '12.0'
+use_frameworks!
+
+target 'ExerciseSegmentExample' do
+  # Local development
+  pod 'ExerciseSegmentAPI', :path => '../'
+  
+  # Or from GitHub (after publishing)
+  # pod 'ExerciseSegmentAPI', :git => 'https://github.com/your-username/exercise_segment_api.git'
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
+    end
+  end
+end

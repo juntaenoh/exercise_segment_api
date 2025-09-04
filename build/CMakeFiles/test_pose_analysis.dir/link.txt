@@ -1,0 +1,1 @@
+/usr/bin/cc  -Wall -Wextra -O3 -march=armv8-a -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/test_pose_analysis.dir/tests/test_pose_analysis.c.o -o test_pose_analysis  libexercise_segment_static.a -lm

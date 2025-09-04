@@ -1,0 +1,10 @@
+module ExerciseSegmentAPI {
+    umbrella header "segment_api.h"
+    
+    export *
+    module * { export * }
+    
+    link "m"
+    
+    requires c99
+}

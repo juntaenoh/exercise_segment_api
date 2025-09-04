@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  exercise-segment-api:
+    build: .
+    container_name: exercise-segment-api
+    volumes:
+      - ./python_example:/app
+      - ./build:/app/build
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+    command: python3 example.py
+
+  # Development service
+  exercise-segment-dev:
+    build: .
+    container_name: exercise-segment-dev
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: /bin/bash
+    stdin_open: true
+    tty: true
