@@ -1,6 +1,13 @@
-# Exercise Segment Analysis API
+# Exercise Segment Analysis API v1.1.0
 
 Google ML Kit으로 추출한 포즈 데이터를 기반으로 운동 동작의 시작 키포즈에서 종료 키포즈까지의 진행도를 분석하고, 각 관절별로 어떻게 교정해야 하는지 실시간 피드백을 제공하는 C API입니다.
+
+## 🆕 v1.1.0 새로운 기능
+
+- **Swift 지원 강화**: Swift 친화적인 C 함수들 추가
+- **구조체 개선**: 더 명확하고 일관성 있는 데이터 구조
+- **에러 처리 개선**: 더 상세한 에러 메시지와 처리
+- **CocoaPods 통합**: iOS 프로젝트에서 쉽게 사용 가능
 
 ## 주요 기능
 
@@ -129,6 +136,80 @@ int main() {
 }
 ```
 
+## Swift 사용법 (v1.1.0)
+
+### CocoaPods 설치
+
+```ruby
+# Podfile
+pod 'ExerciseSegmentAPI', '~> 1.1'
+pod 'GoogleMLKit/PoseDetection', '~> 4.0'
+```
+
+### 기본 사용법
+
+```swift
+import ExerciseSegmentAPI
+import MLKit
+
+class ExerciseSegmentManager: ObservableObject {
+    private let segmentManager = ExerciseSegmentManager()
+    
+    func setupExercise() throws {
+        // API 초기화
+        try segmentManager.initialize()
+        
+        // 캘리브레이션
+        let basePose = getCurrentPose() // MLKit Pose 객체
+        try segmentManager.calibrate(with: basePose)
+        
+        // 세그먼트 생성
+        let startPose = getStartPose()
+        let endPose = getEndPose()
+        let careJoints: [JointType] = [.leftKnee, .rightKnee, .leftHip, .rightHip]
+        
+        try segmentManager.createSegment(
+            startKeypose: startPose,
+            endKeypose: endPose,
+            careJoints: careJoints
+        )
+    }
+    
+    func analyzeCurrentPose(_ pose: Pose) throws -> SegmentOutput {
+        return try segmentManager.analyze(pose)
+    }
+}
+```
+
+### 고급 사용법
+
+```swift
+// 직접 C API 사용
+let result = segment_create_with_indices(
+    &startPoseData,
+    &endPoseData,
+    &calibrationData,
+    jointIndices,
+    Int32(jointIndices.count)
+)
+
+// 단순화된 분석
+var progress: Float = 0.0
+var isComplete: Bool = false
+var similarity: Float = 0.0
+var corrections: [Point3D] = Array(repeating: Point3D(x: 0, y: 0, z: 0), count: 13)
+
+let result = segment_analyze_simple(
+    &currentPoseData,
+    &progress,
+    &isComplete,
+    &similarity,
+    &corrections
+)
+```
+
+자세한 Swift 사용법은 [SWIFT_USAGE.md](SWIFT_USAGE.md)를 참조하세요.
+
 ## API 참조
 
 ### 데이터 구조
@@ -141,12 +222,19 @@ int main() {
 
 ### 주요 함수
 
+#### 기본 API
 - `segment_api_init()`: API 초기화
 - `segment_calibrate()`: 사용자 캘리브레이션
 - `segment_create()`: 운동 세그먼트 생성
 - `segment_analyze()`: 실시간 포즈 분석
 - `segment_destroy()`: 세그먼트 해제
 - `segment_api_cleanup()`: API 정리
+
+#### Swift 친화적인 함수 (v1.1.0)
+- `segment_create_with_indices()`: 인덱스 배열로 세그먼트 생성
+- `segment_analyze_simple()`: 단순화된 분석 결과 반환
+- `segment_create_pose_data()`: 포즈 데이터 생성 헬퍼
+- `segment_create_calibration_data()`: 캘리브레이션 데이터 생성 헬퍼
 
 ## 성능 요구사항
 

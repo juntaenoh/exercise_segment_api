@@ -2,7 +2,11 @@
  * @file segment_api.h
  * @brief 운동 세그먼트 분석 API의 메인 인터페이스
  * @author Exercise Segment API Team
- * @version 1.0.0
+ * @version 1.1.0
+ * 
+ * @details
+ * 이 헤더 파일은 Exercise Segment Analysis API의 모든 공개 함수를 정의합니다.
+ * v1.1.0에서는 Swift 친화적인 함수들이 추가되었습니다.
  */
 
 #ifndef SEGMENT_API_H
@@ -120,6 +124,72 @@ bool segment_validate_pose(const PoseData* pose);
  * @return 에러 설명 문자열 (읽기 전용)
  */
 const char* segment_get_error_message(int error_code);
+
+// MARK: - Swift 친화적인 함수들 (v1.1.0)
+/**
+ * @brief Swift에서 사용하기 편리하도록 설계된 함수들
+ * 
+ * 이 함수들은 Swift의 타입 시스템과 메모리 관리에 최적화되어 있습니다.
+ * 특히 배열과 포인터 처리가 Swift에서 더 자연스럽게 작동하도록 설계되었습니다.
+ */
+
+/**
+ * @brief Swift에서 사용하기 편한 세그먼트 생성 함수
+ * @param start_keypose 시작 키포즈
+ * @param end_keypose 종료 키포즈
+ * @param calibration 캘리브레이션 데이터
+ * @param care_joint_indices 관절 인덱스 배열 (Int32)
+ * @param joint_count 관절 개수
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * Swift에서 JointType enum을 Int32 배열로 변환해서 전달할 수 있도록 개선된 함수
+ */
+int segment_create_with_indices(const PoseData* start_keypose, 
+                                const PoseData* end_keypose,
+                                const CalibrationData* calibration,
+                                const int32_t* care_joint_indices,
+                                int32_t joint_count);
+
+/**
+ * @brief Swift에서 사용하기 편한 분석 함수
+ * @param current_pose 현재 포즈
+ * @param out_progress 진행도 출력 (0.0~1.0)
+ * @param out_is_complete 완료 여부 출력
+ * @param out_similarity 유사도 출력 (0.0~1.0)
+ * @param out_corrections 교정 벡터 배열 출력 (13개 관절)
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * Swift에서 구조체 대신 개별 값으로 결과를 받을 수 있도록 개선된 함수
+ */
+int segment_analyze_simple(const PoseData* current_pose,
+                          float* out_progress,
+                          bool* out_is_complete,
+                          float* out_similarity,
+                          Point3D* out_corrections);
+
+/**
+ * @brief 포즈 데이터를 Swift에서 안전하게 생성하는 헬퍼 함수
+ * @param joints 13개 관절 좌표 배열
+ * @param confidence 신뢰도
+ * @param out_pose 생성된 포즈 데이터를 저장할 구조체
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ */
+int segment_create_pose_data(const Point3D* joints, 
+                            float confidence, 
+                            PoseData* out_pose);
+
+/**
+ * @brief 캘리브레이션 데이터를 Swift에서 안전하게 생성하는 헬퍼 함수
+ * @param base_pose 기본 포즈
+ * @param scale 스케일 팩터
+ * @param offset 오프셋
+ * @param out_calibration 생성된 캘리브레이션 데이터를 저장할 구조체
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ */
+int segment_create_calibration_data(const PoseData* base_pose,
+                                   float scale,
+                                   const Point3D* offset,
+                                   CalibrationData* out_calibration);
 
 #ifdef __cplusplus
 }

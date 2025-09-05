@@ -229,3 +229,107 @@ const char* segment_get_error_message(int error_code) {
     
     return "Unknown error";
 }
+
+// MARK: - Swift 친화적인 함수들 구현
+
+int segment_create_with_indices(const PoseData* start_keypose, 
+                                const PoseData* end_keypose,
+                                const CalibrationData* calibration,
+                                const int32_t* care_joint_indices,
+                                int32_t joint_count) {
+    // 입력 유효성 검사
+    if (!g_initialized) {
+        return SEGMENT_ERROR_NOT_INITIALIZED;
+    }
+    
+    if (!start_keypose || !end_keypose || !calibration || !care_joint_indices) {
+        return SEGMENT_ERROR_INVALID_PARAMETER;
+    }
+    
+    if (joint_count <= 0 || joint_count > 13) {
+        return SEGMENT_ERROR_INVALID_PARAMETER;
+    }
+    
+    // JointType 배열로 변환
+    JointType* care_joints = (JointType*)malloc(joint_count * sizeof(JointType));
+    if (!care_joints) {
+        return SEGMENT_ERROR_MEMORY_ALLOCATION;
+    }
+    
+    for (int32_t i = 0; i < joint_count; i++) {
+        care_joints[i] = (JointType)care_joint_indices[i];
+    }
+    
+    // 기존 segment_create 함수 호출
+    int result = segment_create(start_keypose, end_keypose, calibration, care_joints, joint_count);
+    
+    // 임시 메모리 해제
+    free(care_joints);
+    
+    return result;
+}
+
+int segment_analyze_simple(const PoseData* current_pose,
+                          float* out_progress,
+                          bool* out_is_complete,
+                          float* out_similarity,
+                          Point3D* out_corrections) {
+    // 입력 유효성 검사
+    if (!g_initialized || !g_segment_created) {
+        return SEGMENT_ERROR_NOT_INITIALIZED;
+    }
+    
+    if (!current_pose || !out_progress || !out_is_complete || !out_similarity || !out_corrections) {
+        return SEGMENT_ERROR_INVALID_PARAMETER;
+    }
+    
+    // 기존 segment_analyze 함수 호출
+    SegmentInput input = {*current_pose};
+    SegmentOutput output = segment_analyze(&input);
+    
+    // 결과를 개별 변수로 복사
+    *out_progress = output.progress;
+    *out_is_complete = output.completed;
+    *out_similarity = output.similarity;
+    
+    // 교정 벡터 복사
+    for (int i = 0; i < 13; i++) {
+        out_corrections[i] = output.corrections[i];
+    }
+    
+    return SEGMENT_OK;
+}
+
+int segment_create_pose_data(const Point3D* joints, 
+                            float confidence, 
+                            PoseData* out_pose) {
+    if (!joints || !out_pose) {
+        return SEGMENT_ERROR_INVALID_PARAMETER;
+    }
+    
+    // 13개 관절 복사 (배열로 복사)
+    for (int i = 0; i < JOINT_COUNT; i++) {
+        out_pose->joints[i] = joints[i];
+        out_pose->confidence[i] = confidence;
+    }
+    
+    out_pose->timestamp = 0; // 기본값
+    
+    return SEGMENT_OK;
+}
+
+int segment_create_calibration_data(const PoseData* base_pose,
+                                   float scale,
+                                   const Point3D* offset,
+                                   CalibrationData* out_calibration) {
+    if (!base_pose || !offset || !out_calibration) {
+        return SEGMENT_ERROR_INVALID_PARAMETER;
+    }
+    
+    out_calibration->scale_factor = scale;
+    out_calibration->center_offset = *offset;
+    out_calibration->is_calibrated = true;
+    out_calibration->calibration_quality = 1.0f;  // 기본값
+    
+    return SEGMENT_OK;
+}
