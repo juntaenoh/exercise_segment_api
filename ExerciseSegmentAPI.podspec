@@ -11,16 +11,19 @@ Pod::Spec.new do |spec|
   spec.ios.deployment_target = "12.0"
   spec.osx.deployment_target = "10.15"
 
-  spec.source       = { :git => "https://github.com/juntaenoh/exercise_segment_api.git", :tag => "#{spec.version}" }
+  spec.source       = { :git => "https://github.com/juntaenoh/exercise_segment_api.git", :tag => "v#{spec.version}" }
 
-  spec.source_files = "include/*.h", "src/*.c", "swift/*.swift"
+  spec.source_files = "include/*.h", "src/*.c"
   spec.public_header_files = "include/*.h"
   spec.libraries = "m"
   spec.requires_arc = false
   
-  # Swift 지원
+  # Swift 지원 (선택적)
   spec.swift_version = "5.0"
   
-  # MLKit 의존성 추가
-  spec.dependency 'GoogleMLKit/PoseDetection', '~> 4.0'
+  # MLKit 의존성은 선택적 (사용자가 직접 추가)
+  # spec.dependency 'GoogleMLKit/PoseDetection', '~> 4.0'
+  
+  # 정적 라이브러리 충돌 방지
+  spec.static_framework = true
 end
