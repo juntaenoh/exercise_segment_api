@@ -5,7 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] - 2024-12-19
+## [2.0.0] - 2025-09-10
+### Added
+- **사용자 역할 분리**: A(기록자)와 B(사용자) 역할로 API 분리
+  - `segment_calibrate_recorder()`: A 이용자 캘리브레이션
+  - `segment_record_pose()`: 포즈 기록 및 JSON 저장
+  - `segment_finalize_workout_json()`: 워크아웃 JSON 파일 완성
+  - `segment_calibrate_user()`: B 이용자 캘리브레이션
+  - `segment_load_segment()`: JSON 파일에서 세그먼트 로드
+  - `segment_get_transformed_end_pose()`: 변환된 목표 포즈 반환
+- **JSON 기반 워크아웃 관리**: 포즈 데이터를 JSON 파일로 저장 및 관리
+- **이상적 표준 포즈**: API 내부에 완벽한 비율의 표준 포즈 저장
+- **인덱스 기반 세그먼트**: 두 개의 인덱스로 구분 동작 정의
+- **체형 자동 변환**: 사용자 체형에 맞게 자동으로 포즈 변환
+- `segment_calibrate_between_poses()`: 두 포즈 간 캘리브레이션 데이터 계산
+
+### Changed
+- **API 구조 대폭 변경**: 기존 단일 사용자 모델에서 기록자/사용자 분리 모델로 전환
+- `segment_analyze()`: `SegmentInput` 매개변수 제거, `PoseData` 직접 전달
+- `SegmentInput` 구조체 제거: 더 이상 필요하지 않음
+- 내부 데이터 구조 개선: 사용자별 캘리브레이션 데이터 분리 저장
+- 예제 코드 업데이트: 새로운 API 구조에 맞게 수정
+
+### Removed
+- `segment_create()`: 기존 세그먼트 생성 함수 제거
+- `segment_create_with_indices()`: Swift 친화적 함수 제거
+- `segment_create_calibration_data()`: 불필요한 헬퍼 함수 제거
+- `SegmentInput` 구조체: 더 이상 사용하지 않음
+
+### Fixed
+- 빌드 오류 수정: 새로운 API 구조에 맞게 컴파일 오류 해결
+- 메모리 관리 개선: 사용자별 데이터 분리로 메모리 효율성 향상
+
+## [1.1.0] - 2025-09-05
 
 ### Added
 - Swift 친화적인 C 함수들 추가

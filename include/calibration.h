@@ -23,6 +23,15 @@ extern "C" {
 int segment_calibrate(const PoseData* base_pose, CalibrationData* out_calibration);
 
 /**
+ * @brief 두 포즈 간 캘리브레이션 데이터 계산
+ * @param user_pose 사용자 포즈
+ * @param reference_pose 참조 포즈 (이상적 포즈)
+ * @param out_calibration 계산된 캘리브레이션 결과를 저장할 구조체
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ */
+int segment_calibrate_between_poses(const PoseData* user_pose, const PoseData* reference_pose, CalibrationData* out_calibration);
+
+/**
  * @brief 캘리브레이션 데이터 유효성 검사
  * @param calibration 검사할 캘리브레이션 데이터
  * @return true 유효, false 무효

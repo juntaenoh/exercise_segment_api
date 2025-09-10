@@ -81,44 +81,28 @@ int main() {
     }
     printf("초기화 성공!\n\n");
     
-    // 2. 사용자 기본 포즈로 캘리브레이션
-    printf("2. 캘리브레이션 수행 중...\n");
+    // 2. B 이용자 캘리브레이션
+    printf("2. B 이용자 캘리브레이션 수행 중...\n");
     PoseData base_pose;
     create_sample_pose(&base_pose, 0.0f, 0.0f, 0.0f);
     
-    CalibrationData calibration;
-    result = segment_calibrate(&base_pose, &calibration);
+    result = segment_calibrate_user(&base_pose);
     if (result != SEGMENT_OK) {
         printf("캘리브레이션 실패: %s\n", segment_get_error_message(result));
         segment_api_cleanup();
         return -1;
     }
-    printf("캘리브레이션 성공!\n");
-    printf("  - 스케일 팩터: %.2f\n", calibration.scale_factor);
-    printf("  - 캘리브레이션 품질: %.2f\n", calibration.calibration_quality);
-    printf("  - 중심점 오프셋: (%.2f, %.2f, %.2f)\n\n", 
-           calibration.center_offset.x, calibration.center_offset.y, calibration.center_offset.z);
+    printf("B 이용자 캘리브레이션 성공!\n\n");
     
-    // 3. 운동 세그먼트 생성 (스쿼트)
-    printf("3. 스쿼트 세그먼트 생성 중...\n");
-    PoseData start_keypose, end_keypose;
-    create_squat_start_pose(&start_keypose);
-    create_squat_end_pose(&end_keypose);
-    
-    // 스쿼트에서 중요한 관절들 (무릎과 골반)
-    JointType care_joints[] = {
-        JOINT_LEFT_KNEE, JOINT_RIGHT_KNEE, 
-        JOINT_LEFT_HIP, JOINT_RIGHT_HIP
-    };
-    
-    result = segment_create(&start_keypose, &end_keypose, &calibration, 
-                           care_joints, 4);
+    // 3. JSON 파일에서 세그먼트 로드 (더미 파일 사용)
+    printf("3. 세그먼트 로드 중...\n");
+    result = segment_load_segment("dummy_workout.json", 0, 1);
     if (result != SEGMENT_OK) {
-        printf("세그먼트 생성 실패: %s\n", segment_get_error_message(result));
+        printf("세그먼트 로드 실패: %s\n", segment_get_error_message(result));
         segment_api_cleanup();
         return -1;
     }
-    printf("세그먼트 생성 성공!\n\n");
+    printf("세그먼트 로드 성공!\n\n");
     
     // 4. 실시간 분석 시뮬레이션
     printf("4. 실시간 분석 시뮬레이션...\n");
@@ -137,8 +121,7 @@ int main() {
         create_intermediate_pose(&current_pose, progress);
         
         // 분석 수행
-        SegmentInput input = {current_pose};
-        SegmentOutput output = segment_analyze(&input);
+        SegmentOutput output = segment_analyze(&current_pose);
         
         // 결과 출력
         printf("%.2f   | %s   | %.2f   | ", 
@@ -146,7 +129,8 @@ int main() {
                output.completed ? "예" : "아니오",
                output.similarity);
         
-        // 관절별 교정 벡터 출력
+        // 관절별 교정 벡터 출력 (무릎과 골반)
+        JointType care_joints[] = {JOINT_LEFT_KNEE, JOINT_RIGHT_KNEE, JOINT_LEFT_HIP, JOINT_RIGHT_HIP};
         for (int j = 0; j < 4; j++) {
             JointType joint = care_joints[j];
             Point3D correction = output.corrections[joint];

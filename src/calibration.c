@@ -107,6 +107,65 @@ int segment_calibrate(const PoseData* base_pose, CalibrationData* out_calibratio
     return SEGMENT_OK;
 }
 
+int segment_calibrate_between_poses(const PoseData* user_pose, const PoseData* reference_pose, CalibrationData* out_calibration) {
+    if (!user_pose || !reference_pose || !out_calibration) {
+        return SEGMENT_ERROR_INVALID_PARAMETER;
+    }
+    
+    // 포즈 유효성 검사
+    if (!segment_validate_pose(user_pose) || !segment_validate_pose(reference_pose)) {
+        return SEGMENT_ERROR_INVALID_POSE;
+    }
+    
+    // 필수 관절들의 신뢰도 확인
+    if (user_pose->confidence[JOINT_LEFT_SHOULDER] < MIN_CONFIDENCE_THRESHOLD ||
+        user_pose->confidence[JOINT_RIGHT_SHOULDER] < MIN_CONFIDENCE_THRESHOLD ||
+        user_pose->confidence[JOINT_LEFT_HIP] < MIN_CONFIDENCE_THRESHOLD ||
+        user_pose->confidence[JOINT_RIGHT_HIP] < MIN_CONFIDENCE_THRESHOLD) {
+        return SEGMENT_ERROR_CALIBRATION_FAILED;
+    }
+    
+    // 사용자 어깨 너비 계산
+    float user_shoulder_width = distance_3d(
+        &user_pose->joints[JOINT_LEFT_SHOULDER],
+        &user_pose->joints[JOINT_RIGHT_SHOULDER]
+    );
+    
+    // 참조 포즈 어깨 너비 계산
+    float reference_shoulder_width = distance_3d(
+        &reference_pose->joints[JOINT_LEFT_SHOULDER],
+        &reference_pose->joints[JOINT_RIGHT_SHOULDER]
+    );
+    
+    if (user_shoulder_width <= 0.0f || reference_shoulder_width <= 0.0f) {
+        return SEGMENT_ERROR_CALIBRATION_FAILED;
+    }
+    
+    // 스케일 팩터 계산
+    float scale_factor = user_shoulder_width / reference_shoulder_width;
+    
+    // 중심점 계산
+    Point3D user_center = calculate_center_point(user_pose);
+    Point3D reference_center = calculate_center_point(reference_pose);
+    
+    // 중심점 오프셋 계산
+    Point3D center_offset = subtract_points(&user_center, &reference_center);
+    
+    // 캘리브레이션 품질 평가
+    float calibration_quality = 1.0f;
+    if (scale_factor < 0.5f || scale_factor > 2.0f) {
+        calibration_quality *= 0.5f;  // 스케일이 너무 극단적
+    }
+    
+    // 결과 저장
+    out_calibration->scale_factor = scale_factor;
+    out_calibration->center_offset = center_offset;
+    out_calibration->is_calibrated = true;
+    out_calibration->calibration_quality = calibration_quality;
+    
+    return SEGMENT_OK;
+}
+
 bool segment_validate_calibration(const CalibrationData* calibration) {
     if (!calibration) {
         return false;

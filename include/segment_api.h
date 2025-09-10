@@ -2,11 +2,11 @@
  * @file segment_api.h
  * @brief 운동 세그먼트 분석 API의 메인 인터페이스
  * @author Exercise Segment API Team
- * @version 1.1.0
+ * @version 2.0.0
  * 
  * @details
  * 이 헤더 파일은 Exercise Segment Analysis API의 모든 공개 함수를 정의합니다.
- * v1.1.0에서는 Swift 친화적인 함수들이 추가되었습니다.
+ * v2.0.0에서는 기록자(A)와 사용자(B) 역할 분리 및 JSON 기반 워크아웃 관리가 추가되었습니다.
  */
 
 #ifndef SEGMENT_API_H
@@ -35,53 +35,84 @@ int segment_api_init(void);
  */
 void segment_api_cleanup(void);
 
-/**
- * @brief 사용자의 기본 포즈로 개인화 캘리브레이션 수행
- * @param base_pose 사용자가 자연스럽게 서있는 자세의 포즈 데이터
- * @param out_calibration 계산된 캘리브레이션 결과를 저장할 구조체
- * @return SEGMENT_OK 성공, 음수 에러 코드
- * 
- * 포즈 유효성 검사, 주요 관절 간 거리 측정, 표준 크기 대비 스케일 팩터 계산,
- * 중심점 오프셋 계산, 캘리브레이션 품질 평가를 수행합니다.
- */
-int segment_calibrate(const PoseData* base_pose, CalibrationData* out_calibration);
+// MARK: - A 이용자 (기록자) API
 
 /**
- * @brief 캘리브레이션 데이터 유효성 검사
- * @param calibration 검사할 캘리브레이션 데이터
- * @return true 유효, false 무효
- * 
- * is_calibrated 플래그, scale_factor 범위, calibration_quality 임계값을 검사합니다.
- */
-bool segment_validate_calibration(const CalibrationData* calibration);
-
-/**
- * @brief 운동 세그먼트 생성 및 설정
- * @param start_keypose 시작 키포즈 (개발자가 미리 준비)
- * @param end_keypose 종료 키포즈 (개발자가 미리 준비)
- * @param calibration 사용자 캘리브레이션 데이터
- * @param care_joints 이 운동에서 중요한 관절들의 배열
- * @param care_joint_count care_joints 배열 크기
+ * @brief A 이용자의 기본 포즈로 캘리브레이션 수행
+ * @param base_pose A 이용자가 자연스럽게 서있는 자세의 포즈 데이터
  * @return SEGMENT_OK 성공, 음수 에러 코드
  * 
- * 입력 매개변수 유효성 검사, 키포즈들을 캘리브레이션에 따라 개인화,
- * Care 영역 설정 저장, 내부 세그먼트 상태 초기화를 수행합니다.
+ * A의 포즈를 API 내부 이상적 기본 포즈와 비교하여 신체 비율 차이를 계산하고,
+ * 내부에 저장합니다. 이후 A가 기록하는 모든 포즈가 이상적 비율로 변환됩니다.
  */
-int segment_create(const PoseData* start_keypose, 
-                   const PoseData* end_keypose,
-                   const CalibrationData* calibration,
-                   const JointType* care_joints,
-                   int care_joint_count);
+int segment_calibrate_recorder(const PoseData* base_pose);
+
+/**
+ * @brief A 이용자가 현재 포즈를 기록하여 JSON 파일에 저장
+ * @param current_pose A 이용자의 현재 포즈 데이터
+ * @param pose_name 포즈 이름 (예: "standing", "squat_down")
+ * @param json_file_path JSON 파일 경로
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * A의 포즈를 이상적 비율로 변환하여 JSON 파일에 저장합니다.
+ * segment_calibrate_recorder()가 먼저 호출되어야 합니다.
+ */
+int segment_record_pose(const PoseData* current_pose, const char* pose_name, const char* json_file_path);
+
+/**
+ * @brief 워크아웃 JSON 파일을 완성
+ * @param workout_name 워크아웃 이름 (예: "squat", "pushup")
+ * @param json_file_path JSON 파일 경로
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * 기록된 모든 포즈를 하나의 워크아웃으로 묶어서 JSON 파일을 완성합니다.
+ */
+int segment_finalize_workout_json(const char* workout_name, const char* json_file_path);
+
+// MARK: - B 이용자 (사용자) API
+
+/**
+ * @brief B 이용자의 기본 포즈로 캘리브레이션 수행
+ * @param base_pose B 이용자가 자연스럽게 서있는 자세의 포즈 데이터
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * B의 포즈를 API 내부 이상적 기본 포즈와 비교하여 신체 비율 차이를 계산하고,
+ * 내부에 저장합니다. 이후 B가 사용하는 모든 포즈가 B의 체형에 맞게 변환됩니다.
+ */
+int segment_calibrate_user(const PoseData* base_pose);
+
+/**
+ * @brief JSON 파일에서 세그먼트 로드
+ * @param json_file_path JSON 파일 경로
+ * @param start_index 시작 포즈 인덱스
+ * @param end_index 종료 포즈 인덱스
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * JSON 파일에서 두 개의 인덱스로 포즈를 로드하고, 이상적 비율의 포즈를
+ * B의 체형에 맞게 변환하여 내부에 저장합니다.
+ * segment_calibrate_user()가 먼저 호출되어야 합니다.
+ */
+int segment_load_segment(const char* json_file_path, int start_index, int end_index);
 
 /**
  * @brief 실시간 포즈 분석 및 피드백 생성
- * @param input 현재 포즈 데이터
+ * @param current_pose B 이용자의 현재 포즈 데이터
  * @return 분석 결과 구조체
  * 
- * 입력 포즈를 캘리브레이션에 따라 정규화, 진행도 계산, 목표 키포즈 계산,
- * 각 관절별 교정 벡터 계산, 완료 여부 판단을 수행합니다.
+ * B의 현재 포즈를 로드된 세그먼트의 시작→종료 포즈와 비교하여
+ * 진행도, 교정 벡터, 완료 여부를 계산합니다.
  */
-SegmentOutput segment_analyze(const SegmentInput* input);
+SegmentOutput segment_analyze(const PoseData* current_pose);
+
+/**
+ * @brief 현재 세그먼트의 변환된 종료 포즈 반환
+ * @param out_pose 변환된 종료 포즈를 저장할 구조체
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ * 
+ * 현재 로드된 세그먼트의 종료 포즈를 B의 체형에 맞게 변환된 상태로 반환합니다.
+ * B가 최종적으로 도달해야 하는 목표 포즈입니다.
+ */
+int segment_get_transformed_end_pose(PoseData* out_pose);
 
 /**
  * @brief 현재 세그먼트를 초기 상태로 리셋
@@ -97,16 +128,6 @@ int segment_reset(void);
  * 세그먼트 관련 모든 메모리를 해제합니다.
  */
 void segment_destroy(void);
-
-/**
- * @brief 두 포즈 간 유사도 계산
- * @param pose1 첫 번째 포즈
- * @param pose2 두 번째 포즈
- * @return 유사도 (0.0~1.0)
- * 
- * 평균 관절 거리를 기반으로 유사도를 계산합니다.
- */
-float segment_calculate_similarity(const PoseData* pose1, const PoseData* pose2);
 
 /**
  * @brief 포즈 데이터 유효성 검사
@@ -125,30 +146,13 @@ bool segment_validate_pose(const PoseData* pose);
  */
 const char* segment_get_error_message(int error_code);
 
-// MARK: - Swift 친화적인 함수들 (v1.1.0)
+// MARK: - Swift 친화적인 함수들 (v2.0.0)
 /**
  * @brief Swift에서 사용하기 편리하도록 설계된 함수들
  * 
  * 이 함수들은 Swift의 타입 시스템과 메모리 관리에 최적화되어 있습니다.
- * 특히 배열과 포인터 처리가 Swift에서 더 자연스럽게 작동하도록 설계되었습니다.
+ * v2.0.0에서는 새로운 API 구조에 맞게 업데이트되었습니다.
  */
-
-/**
- * @brief Swift에서 사용하기 편한 세그먼트 생성 함수
- * @param start_keypose 시작 키포즈
- * @param end_keypose 종료 키포즈
- * @param calibration 캘리브레이션 데이터
- * @param care_joint_indices 관절 인덱스 배열 (Int32)
- * @param joint_count 관절 개수
- * @return SEGMENT_OK 성공, 음수 에러 코드
- * 
- * Swift에서 JointType enum을 Int32 배열로 변환해서 전달할 수 있도록 개선된 함수
- */
-int segment_create_with_indices(const PoseData* start_keypose, 
-                                const PoseData* end_keypose,
-                                const CalibrationData* calibration,
-                                const int32_t* care_joint_indices,
-                                int32_t joint_count);
 
 /**
  * @brief Swift에서 사용하기 편한 분석 함수
@@ -177,19 +181,6 @@ int segment_analyze_simple(const PoseData* current_pose,
 int segment_create_pose_data(const Point3D* joints, 
                             float confidence, 
                             PoseData* out_pose);
-
-/**
- * @brief 캘리브레이션 데이터를 Swift에서 안전하게 생성하는 헬퍼 함수
- * @param base_pose 기본 포즈
- * @param scale 스케일 팩터
- * @param offset 오프셋
- * @param out_calibration 생성된 캘리브레이션 데이터를 저장할 구조체
- * @return SEGMENT_OK 성공, 음수 에러 코드
- */
-int segment_create_calibration_data(const PoseData* base_pose,
-                                   float scale,
-                                   const Point3D* offset,
-                                   CalibrationData* out_calibration);
 
 #ifdef __cplusplus
 }

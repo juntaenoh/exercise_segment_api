@@ -1,15 +1,15 @@
-# ExerciseSegmentAPI Swift 사용법
+# ExerciseSegmentAPI Swift 사용법 v2.0.0
 
 ## 개요
 
-ExerciseSegmentAPI는 Swift에서 GoogleMLKit과 함께 사용할 수 있도록 최적화된 운동 세그먼트 분석 라이브러리입니다.
+ExerciseSegmentAPI v2.0.0은 Swift에서 GoogleMLKit과 함께 사용할 수 있도록 최적화된 운동 세그먼트 분석 라이브러리입니다. 새로운 버전에서는 A(기록자)와 B(사용자) 역할로 API가 분리되어 더욱 유연한 워크아웃 관리가 가능합니다.
 
 ## 설치
 
 ### CocoaPods
 
 ```ruby
-pod 'ExerciseSegmentAPI', '~> 1.0'
+pod 'ExerciseSegmentAPI', '~> 2.0'
 ```
 
 ### 의존성
@@ -18,120 +18,197 @@ pod 'ExerciseSegmentAPI', '~> 1.0'
 - iOS 12.0+
 - Swift 5.0+
 
-## 기본 사용법
+## A 이용자 (기록자) - 워크아웃 생성
 
-### 1. 초기화
+### 1. 초기화 및 캘리브레이션
 
 ```swift
 import ExerciseSegmentAPI
 import MLKit
 
-let segmentManager = ExerciseSegmentManager()
-
-do {
-    try segmentManager.initialize()
-    print("API 초기화 성공")
-} catch {
-    print("초기화 실패: \(error)")
-}
-```
-
-### 2. 캘리브레이션
-
-```swift
-// GoogleMLKit에서 포즈 감지
-let poseDetector = PoseDetector.poseDetector(options: PoseDetectorOptions())
-
-// 기본 포즈로 캘리브레이션
-do {
-    try segmentManager.calibrate(with: basePose)
-    print("캘리브레이션 완료")
-} catch {
-    print("캘리브레이션 실패: \(error)")
-}
-```
-
-### 3. 세그먼트 생성
-
-```swift
-// 시작 키포즈와 종료 키포즈 정의
-let startKeypose: Pose = // ... 시작 자세
-let endKeypose: Pose = // ... 종료 자세
-
-// 관심 관절들 정의
-let careJoints: [JointType] = [
-    .leftShoulder, .rightShoulder,
-    .leftElbow, .rightElbow,
-    .leftWrist, .rightWrist,
-    .leftHip, .rightHip
-]
-
-do {
-    try segmentManager.createSegment(
-        startKeypose: startKeypose,
-        endKeypose: endKeypose,
-        careJoints: careJoints
-    )
-    print("세그먼트 생성 완료")
-} catch {
-    print("세그먼트 생성 실패: \(error)")
-}
-```
-
-### 4. 실시간 분석
-
-```swift
-// 실시간 포즈 분석
-do {
-    let result = try segmentManager.analyze(currentPose)
+class WorkoutRecorder: ObservableObject {
+    private let segmentManager = ExerciseSegmentManager()
     
-    print("진행도: \(result.progress * 100)%")
-    print("완료 여부: \(result.isComplete)")
-    print("유사도: \(result.similarity * 100)%")
-    
-    // 교정 피드백 생성
-    for (index, correction) in result.corrections.enumerated() {
-        if correction.x > 0.1 || correction.y > 0.1 || correction.z > 0.1 {
-            print("관절 \(index): 교정 필요")
-        }
+    func setupAsRecorder() throws {
+        // API 초기화
+        try segmentManager.initialize()
+        
+        // A의 기본 포즈로 캘리브레이션
+        let myBasePose = getMyNaturalPose() // MLKit Pose 객체
+        try segmentManager.calibrateRecorder(with: myBasePose)
+        print("A 이용자 캘리브레이션 완료")
     }
-} catch {
-    print("분석 실패: \(error)")
+}
+```
+
+### 2. 포즈 기록
+
+```swift
+func recordWorkout() throws {
+    // 스쿼트 워크아웃 기록
+    let standingPose = getStandingPose()
+    let squatDownPose = getSquatDownPose()
+    let squatUpPose = getSquatUpPose()
+    
+    try segmentManager.recordPose(standingPose, name: "standing", jsonFile: "squat_workout.json")
+    try segmentManager.recordPose(squatDownPose, name: "squat_down", jsonFile: "squat_workout.json")
+    try segmentManager.recordPose(squatUpPose, name: "squat_up", jsonFile: "squat_workout.json")
+    
+    // 워크아웃 완성
+    try segmentManager.finalizeWorkout(name: "squat", jsonFile: "squat_workout.json")
+    print("워크아웃 생성 완료")
+}
+```
+
+## B 이용자 (사용자) - 워크아웃 사용
+
+### 1. 초기화 및 캘리브레이션
+
+```swift
+class ExerciseSegmentManager: ObservableObject {
+    private let segmentManager = ExerciseSegmentManager()
+    
+    func setupAsUser() throws {
+        // API 초기화
+        try segmentManager.initialize()
+        
+        // B의 기본 포즈로 캘리브레이션
+        let myBasePose = getMyNaturalPose() // MLKit Pose 객체
+        try segmentManager.calibrateUser(with: myBasePose)
+        print("B 이용자 캘리브레이션 완료")
+    }
+}
+```
+
+### 2. 세그먼트 로드
+
+```swift
+func loadWorkoutSegment() throws {
+    // 세그먼트 1: 서기 → 스쿼트 내려가기 (인덱스 0→1)
+    try segmentManager.loadSegment(jsonFile: "squat_workout.json", 
+                                 startIndex: 0, 
+                                 endIndex: 1)
+    print("세그먼트 로드 완료")
+}
+```
+
+### 3. 실시간 분석
+
+```swift
+func analyzeCurrentPose(_ pose: Pose) throws -> SegmentOutput {
+    let output = try segmentManager.analyze(pose)
+    
+    print("진행도: \(output.progress)")
+    print("완료 여부: \(output.completed ? "예" : "아니오")")
+    print("유사도: \(output.similarity)")
+    
+    return output
+}
+
+func getTargetPose() throws -> PoseData {
+    return try segmentManager.getTransformedEndPose()
+}
+```
+
+## 통합 사용 예제
+
+### 완전한 워크플로우
+
+```swift
+class ExerciseApp: ObservableObject {
+    private let recorder = WorkoutRecorder()
+    private let user = ExerciseSegmentManager()
+    
+    func createAndUseWorkout() throws {
+        // 1. A가 워크아웃 생성
+        try recorder.setupAsRecorder()
+        try recorder.recordWorkout()
+        
+        // 2. B가 워크아웃 사용
+        try user.setupAsUser()
+        try user.loadWorkoutSegment()
+        
+        // 3. 실시간 분석
+        let currentPose = getCurrentPose()
+        let result = try user.analyzeCurrentPose(currentPose)
+        
+        // 4. 목표 포즈 확인
+        let targetPose = try user.getTargetPose()
+    }
 }
 ```
 
 ## 고급 사용법
 
-### 1. 간편한 세그먼트 생성
+### 1. 여러 세그먼트 순차 실행
 
 ```swift
-// 기본 관절들로 세그먼트 생성
-do {
-    try segmentManager.createSegmentWithDefaultJoints(
-        startKeypose: startKeypose,
-        endKeypose: endKeypose
-    )
-} catch {
-    print("세그먼트 생성 실패: \(error)")
+class MultiSegmentWorkout: ObservableObject {
+    private let user = ExerciseSegmentManager()
+    private var currentSegmentIndex = 0
+    private let segments = [(0, 1), (1, 2), (2, 0)] // 서기→내려가기→올라가기→서기
+    
+    func startWorkout() throws {
+        try user.setupAsUser()
+        try loadNextSegment()
+    }
+    
+    func loadNextSegment() throws {
+        if currentSegmentIndex < segments.count {
+            let (start, end) = segments[currentSegmentIndex]
+            try user.loadSegment(jsonFile: "squat_workout.json", 
+                               startIndex: start, 
+                               endIndex: end)
+            print("세그먼트 \(currentSegmentIndex + 1) 로드 완료")
+        }
+    }
+    
+    func completeCurrentSegment() throws {
+        currentSegmentIndex += 1
+        if currentSegmentIndex < segments.count {
+            try loadNextSegment()
+        } else {
+            print("워크아웃 완료!")
+        }
+    }
 }
 ```
 
-### 2. 피드백과 함께 분석
+### 2. 실시간 피드백 시스템
 
 ```swift
-do {
-    let feedback = try segmentManager.analyzeWithFeedback(currentPose)
+class RealTimeFeedback: ObservableObject {
+    private let user = ExerciseSegmentManager()
+    @Published var currentProgress: Float = 0.0
+    @Published var isCompleted: Bool = false
+    @Published var feedbackMessages: [String] = []
     
-    print("진행도: \(feedback.progress * 100)%")
-    print("완료: \(feedback.isComplete)")
-    print("유사도: \(feedback.similarity * 100)%")
-    
-    // 교정 피드백 출력
-    for correction in feedback.corrections {
-        print("💡 \(correction)")
+    func analyzeWithFeedback(_ pose: Pose) throws {
+        let result = try user.analyze(pose)
+        
+        currentProgress = result.progress
+        isCompleted = result.completed
+        
+        // 교정 피드백 생성
+        feedbackMessages = generateFeedbackMessages(result.corrections)
     }
-} catch {
-    print("분석 실패: \(error)")
+    
+    private func generateFeedbackMessages(_ corrections: [Point3D]) -> [String] {
+        var messages: [String] = []
+        
+        let jointNames = ["코", "왼어깨", "오른어깨", "왼팔꿈치", "오른팔꿈치", 
+                         "왼손목", "오른손목", "왼골반", "오른골반", 
+                         "왼무릎", "오른무릎", "왼발목", "오른발목"]
+        
+        for (index, correction) in corrections.enumerated() {
+            if abs(correction.x) > 0.1 || abs(correction.y) > 0.1 || abs(correction.z) > 0.1 {
+                let direction = getDirectionString(correction)
+                messages.append("\(jointNames[index])을 \(direction)로 움직이세요")
+            }
+        }
+        
+        return messages
+    }
 }
 ```
 
@@ -141,15 +218,18 @@ do {
 import MLKit
 
 class ExerciseViewController: UIViewController {
-    private let segmentManager = ExerciseSegmentManager()
+    private let user = ExerciseSegmentManager()
     private let poseDetector = PoseDetector.poseDetector(options: PoseDetectorOptions())
+    @Published var currentProgress: Float = 0.0
+    @Published var isCompleted: Bool = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // API 초기화
+        // B 이용자로 설정
         do {
-            try segmentManager.initialize()
+            try user.setupAsUser()
+            try user.loadSegment(jsonFile: "squat_workout.json", startIndex: 0, endIndex: 1)
         } catch {
             print("초기화 실패: \(error)")
         }
@@ -158,10 +238,12 @@ class ExerciseViewController: UIViewController {
     func processPose(_ pose: Pose) {
         // 실시간 분석
         do {
-            let result = try segmentManager.analyze(pose)
+            let result = try user.analyze(pose)
             
             // UI 업데이트
             DispatchQueue.main.async {
+                self.currentProgress = result.progress
+                self.isCompleted = result.completed
                 self.updateProgress(result.progress)
                 self.showFeedback(result)
             }
@@ -177,10 +259,19 @@ class ExerciseViewController: UIViewController {
     
     private func showFeedback(_ result: SegmentOutput) {
         // 피드백 표시
-        if result.isComplete {
+        if result.completed {
             showCompletionMessage()
         } else {
             showCorrections(result.corrections)
+        }
+    }
+    
+    func getTargetPose() -> PoseData? {
+        do {
+            return try user.getTargetPose()
+        } catch {
+            print("목표 포즈 가져오기 실패: \(error)")
+            return nil
         }
     }
 }

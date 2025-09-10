@@ -69,14 +69,6 @@ typedef struct {
 } CalibrationData;
 
 /**
- * @brief 세그먼트 입력 구조체
- * 실시간 분석을 위한 입력 데이터
- */
-typedef struct {
-    PoseData raw_pose;                 // Google ML Kit에서 받은 원본 포즈
-} SegmentInput;
-
-/**
  * @brief 세그먼트 출력 구조체
  * 분석 결과 및 피드백 정보
  */

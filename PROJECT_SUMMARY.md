@@ -1,4 +1,13 @@
-# Exercise Segment Analysis API - 프로젝트 요약
+# Exercise Segment Analysis API v2.0.0 - 프로젝트 요약
+
+## 🆕 v2.0.0 주요 변경사항
+
+### 새로운 API 구조
+- **사용자 역할 분리**: A(기록자)와 B(사용자) 역할로 API 분리
+- **JSON 기반 워크아웃**: 포즈 데이터를 JSON 파일로 관리
+- **이상적 표준 포즈**: API 내부에 완벽한 비율의 표준 포즈 저장
+- **인덱스 기반 세그먼트**: 두 개의 인덱스로 구분 동작 정의
+- **체형 자동 변환**: 사용자 체형에 맞게 자동으로 포즈 변환
 
 ## 개발 완료 현황 ✅
 
@@ -53,12 +62,22 @@ exercise_segment_api/
 - ✅ 포즈 정규화 (중심점 맞춤)
 - ✅ 포즈 데이터 유효성 검사
 
-#### 🎮 세그먼트 관리
-- ✅ API 초기화/정리
-- ✅ 운동 세그먼트 생성
+#### 🎮 A 이용자 (기록자) API
+- ✅ 기록자 캘리브레이션
+- ✅ 포즈 기록 및 JSON 저장
+- ✅ 워크아웃 JSON 파일 완성
+
+#### 🎮 B 이용자 (사용자) API
+- ✅ 사용자 캘리브레이션
+- ✅ JSON 파일에서 세그먼트 로드
 - ✅ 실시간 분석 엔진
+- ✅ 변환된 목표 포즈 반환
 - ✅ 세그먼트 리셋/해제
+
+#### 🎮 공통 기능
+- ✅ API 초기화/정리
 - ✅ 에러 처리 및 메시지
+- ✅ 이상적 표준 포즈 관리
 
 ### 3. 데이터 구조 ✅
 
@@ -163,26 +182,43 @@ similarity = 1.0 - (average_joint_distance / max_possible_distance);
 
 ## 사용 예시 📝
 
+### A 이용자 (기록자)
 ```c
 // 1. 초기화
 segment_api_init();
 
-// 2. 캘리브레이션
-CalibrationData calibration;
-segment_calibrate(&base_pose, &calibration);
+// 2. A의 캘리브레이션
+segment_calibrate_recorder(&myBasePose);
 
-// 3. 세그먼트 생성
-JointType care_joints[] = {JOINT_LEFT_KNEE, JOINT_RIGHT_KNEE};
-segment_create(&start_pose, &end_pose, &calibration, care_joints, 2);
+// 3. 포즈 기록
+segment_record_pose(&standingPose, "standing", "squat_workout.json");
+segment_record_pose(&squatDownPose, "squat_down", "squat_workout.json");
+
+// 4. 워크아웃 완성
+segment_finalize_workout_json("squat", "squat_workout.json");
+```
+
+### B 이용자 (사용자)
+```c
+// 1. 초기화
+segment_api_init();
+
+// 2. B의 캘리브레이션
+segment_calibrate_user(&myBasePose);
+
+// 3. 세그먼트 로드
+segment_load_segment("squat_workout.json", 0, 1);
 
 // 4. 실시간 분석
-SegmentInput input = {current_pose};
-SegmentOutput output = segment_analyze(&input);
+SegmentOutput output = segment_analyze(&currentPose);
 
-// 5. 결과 활용
-printf("진행도: %.2f, 완료: %s\n", 
-       output.progress, 
-       output.completed ? "예" : "아니오");
+// 5. 결과 확인
+printf("진행도: %.2f\n", output.progress);
+printf("완료: %s\n", output.completed ? "예" : "아니오");
+
+// 6. 목표 포즈 확인
+PoseData targetPose;
+segment_get_transformed_end_pose(&targetPose);
 ```
 
 ## 결론 🎉

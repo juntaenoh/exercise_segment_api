@@ -1,20 +1,26 @@
-# Exercise Segment Analysis API v1.1.0
+# Exercise Segment Analysis API v2.0.0
 
 Google ML Kit으로 추출한 포즈 데이터를 기반으로 운동 동작의 시작 키포즈에서 종료 키포즈까지의 진행도를 분석하고, 각 관절별로 어떻게 교정해야 하는지 실시간 피드백을 제공하는 C API입니다.
 
-## 🆕 v1.1.0 새로운 기능
+## 🆕 v2.0.0 새로운 기능
 
-- **Swift 지원 강화**: Swift 친화적인 C 함수들 추가
-- **구조체 개선**: 더 명확하고 일관성 있는 데이터 구조
-- **에러 처리 개선**: 더 상세한 에러 메시지와 처리
-- **CocoaPods 통합**: iOS 프로젝트에서 쉽게 사용 가능
+- **사용자 역할 분리**: A(기록자)와 B(사용자) 역할로 API 분리
+- **JSON 기반 워크아웃**: 포즈 데이터를 JSON 파일로 관리
+- **이상적 표준 포즈**: API 내부에 완벽한 비율의 표준 포즈 저장
+- **인덱스 기반 세그먼트**: 두 개의 인덱스로 구분 동작 정의
+- **체형 자동 변환**: 사용자 체형에 맞게 자동으로 포즈 변환
 
 ## 주요 기능
 
-- **개인화**: 사용자 기본 포즈로 캘리브레이션하여 표준 키포즈를 개인 체형에 맞게 조정
+### A 이용자 (기록자)
+- **포즈 기록**: 운동 동작을 이상적 비율로 변환하여 JSON 파일로 저장
+- **워크아웃 생성**: 여러 포즈를 하나의 워크아웃으로 묶어서 완성
+
+### B 이용자 (사용자)
+- **개인화**: 사용자 기본 포즈로 캘리브레이션하여 이상적 포즈를 개인 체형에 맞게 조정
 - **진행도 분석**: 현재 포즈가 시작에서 끝까지 어느 정도 진행되었는지 0.0~1.0으로 계산
-- **관절별 교정**: 11개 주요 관절별로 어느 방향으로 움직여야 하는지 3D 벡터로 제공
-- **관심 영역**: 운동별로 중요한 관절만 선별하여 피드백 (Care/Don't Care)
+- **관절별 교정**: 13개 주요 관절별로 어느 방향으로 움직여야 하는지 3D 벡터로 제공
+- **실시간 피드백**: 로드된 세그먼트에 맞춰 실시간 분석 및 피드백
 
 ## 설계 원칙
 
@@ -71,7 +77,7 @@ cmake --build . --config Release
 
 ## 사용 예제
 
-### 기본 사용법
+### A 이용자 (기록자) - 워크아웃 생성
 
 ```c
 #include "segment_api.h"
@@ -84,69 +90,124 @@ int main() {
         return -1;
     }
     
-    // 사용자 기본 포즈로 캘리브레이션
-    PoseData base_pose = { /* 사용자 기본 포즈 데이터 */ };
-    CalibrationData calibration;
-    result = segment_calibrate(&base_pose, &calibration);
+    // A의 기본 포즈로 캘리브레이션
+    PoseData myBasePose = { /* A가 자연스럽게 서있는 자세 */ };
+    result = segment_calibrate_recorder(&myBasePose);
     if (result != SEGMENT_OK) {
         printf("캘리브레이션 실패: %s\n", segment_get_error_message(result));
         segment_api_cleanup();
         return -1;
     }
     
-    // 운동 세그먼트 생성
-    PoseData start_keypose = { /* 시작 키포즈 */ };
-    PoseData end_keypose = { /* 종료 키포즈 */ };
-    JointType care_joints[] = {JOINT_LEFT_ELBOW, JOINT_RIGHT_ELBOW, JOINT_LEFT_KNEE, JOINT_RIGHT_KNEE};
+    // 스쿼트 워크아웃 기록
+    PoseData standingPose = { /* 서기 자세 */ };
+    PoseData squatDownPose = { /* 스쿼트 내려가기 자세 */ };
+    PoseData squatUpPose = { /* 스쿼트 올라가기 자세 */ };
     
-    result = segment_create(&start_keypose, &end_keypose, &calibration, 
-                           care_joints, 4);
-    if (result != SEGMENT_OK) {
-        printf("세그먼트 생성 실패: %s\n", segment_get_error_message(result));
-        segment_api_cleanup();
-        return -1;
-    }
+    segment_record_pose(&standingPose, "standing", "squat_workout.json");
+    segment_record_pose(&squatDownPose, "squat_down", "squat_workout.json");
+    segment_record_pose(&squatUpPose, "squat_up", "squat_workout.json");
     
-    // 실시간 분석 루프
-    while (/* 운동 진행 중 */) {
-        PoseData current_pose = { /* 현재 포즈 데이터 */ };
-        SegmentInput input = {current_pose};
-        
-        SegmentOutput output = segment_analyze(&input);
-        
-        printf("진행도: %.2f, 완료: %s, 유사도: %.2f\n", 
-               output.progress, 
-               output.completed ? "예" : "아니오",
-               output.similarity);
-        
-        // 관절별 교정 벡터 출력
-        for (int i = 0; i < 4; i++) {
-            JointType joint = care_joints[i];
-            Point3D correction = output.corrections[joint];
-            printf("관절 %d 교정: (%.2f, %.2f, %.2f)\n", 
-                   joint, correction.x, correction.y, correction.z);
-        }
-    }
+    // 워크아웃 완성
+    segment_finalize_workout_json("squat", "squat_workout.json");
     
     // 정리
-    segment_destroy();
     segment_api_cleanup();
     
     return 0;
 }
 ```
 
-## Swift 사용법 (v1.1.0)
+### B 이용자 (사용자) - 워크아웃 사용
+
+```c
+#include "segment_api.h"
+
+int main() {
+    // API 초기화
+    int result = segment_api_init();
+    if (result != SEGMENT_OK) {
+        printf("초기화 실패: %s\n", segment_get_error_message(result));
+        return -1;
+    }
+    
+    // B의 기본 포즈로 캘리브레이션
+    PoseData myBasePose = { /* B가 자연스럽게 서있는 자세 */ };
+    result = segment_calibrate_user(&myBasePose);
+    if (result != SEGMENT_OK) {
+        printf("캘리브레이션 실패: %s\n", segment_get_error_message(result));
+        segment_api_cleanup();
+        return -1;
+    }
+    
+    // 세그먼트 1: 서기 → 스쿼트 내려가기 (인덱스 0→1)
+    result = segment_load_segment("squat_workout.json", 0, 1);
+    if (result != SEGMENT_OK) {
+        printf("세그먼트 로드 실패: %s\n", segment_get_error_message(result));
+        segment_api_cleanup();
+        return -1;
+    }
+    
+    // 실시간 분석 루프
+    while (/* 운동 진행 중 */) {
+        PoseData currentPose = { /* 현재 포즈 데이터 */ };
+        SegmentOutput output = segment_analyze(&currentPose);
+        
+        printf("진행도: %.2f, 완료: %s, 유사도: %.2f\n", 
+               output.progress, 
+               output.completed ? "예" : "아니오",
+               output.similarity);
+        
+        // 목표 포즈 확인
+        PoseData targetPose;
+        segment_get_transformed_end_pose(&targetPose);
+    }
+    
+    // 정리
+    segment_api_cleanup();
+    return 0;
+}
+```
+
+## Swift 사용법 (v2.0.0)
 
 ### CocoaPods 설치
 
 ```ruby
 # Podfile
-pod 'ExerciseSegmentAPI', '~> 1.1'
+pod 'ExerciseSegmentAPI', '~> 2.0'
 pod 'GoogleMLKit/PoseDetection', '~> 4.0'
 ```
 
-### 기본 사용법
+### A 이용자 (기록자) - 워크아웃 생성
+
+```swift
+import ExerciseSegmentAPI
+import MLKit
+
+class WorkoutRecorder: ObservableObject {
+    private let segmentManager = ExerciseSegmentManager()
+    
+    func setupAsRecorder() throws {
+        // API 초기화
+        try segmentManager.initialize()
+        
+        // A의 기본 포즈로 캘리브레이션
+        let myBasePose = getMyNaturalPose() // MLKit Pose 객체
+        try segmentManager.calibrateRecorder(with: myBasePose)
+    }
+    
+    func recordPose(_ pose: Pose, name: String, workoutFile: String) throws {
+        try segmentManager.recordPose(pose, name: name, jsonFile: workoutFile)
+    }
+    
+    func finalizeWorkout(name: String, workoutFile: String) throws {
+        try segmentManager.finalizeWorkout(name: name, jsonFile: workoutFile)
+    }
+}
+```
+
+### B 이용자 (사용자) - 워크아웃 사용
 
 ```swift
 import ExerciseSegmentAPI
@@ -155,28 +216,27 @@ import MLKit
 class ExerciseSegmentManager: ObservableObject {
     private let segmentManager = ExerciseSegmentManager()
     
-    func setupExercise() throws {
+    func setupAsUser() throws {
         // API 초기화
         try segmentManager.initialize()
         
-        // 캘리브레이션
-        let basePose = getCurrentPose() // MLKit Pose 객체
-        try segmentManager.calibrate(with: basePose)
-        
-        // 세그먼트 생성
-        let startPose = getStartPose()
-        let endPose = getEndPose()
-        let careJoints: [JointType] = [.leftKnee, .rightKnee, .leftHip, .rightHip]
-        
-        try segmentManager.createSegment(
-            startKeypose: startPose,
-            endKeypose: endPose,
-            careJoints: careJoints
-        )
+        // B의 기본 포즈로 캘리브레이션
+        let myBasePose = getMyNaturalPose() // MLKit Pose 객체
+        try segmentManager.calibrateUser(with: myBasePose)
+    }
+    
+    func loadSegment(workoutFile: String, startIndex: Int, endIndex: Int) throws {
+        try segmentManager.loadSegment(jsonFile: workoutFile, 
+                                     startIndex: startIndex, 
+                                     endIndex: endIndex)
     }
     
     func analyzeCurrentPose(_ pose: Pose) throws -> SegmentOutput {
         return try segmentManager.analyze(pose)
+    }
+    
+    func getTargetPose() throws -> PoseData {
+        return try segmentManager.getTransformedEndPose()
     }
 }
 ```
