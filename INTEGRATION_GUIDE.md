@@ -11,6 +11,43 @@
 
 ## 📱 1. Swift (iOS/macOS) 통합
 
+### ⚠️ Swift 사용 시 주의사항
+
+Swift에서 C API를 사용할 때 다음과 같은 타입 변환 문제가 발생할 수 있습니다:
+
+#### 문제 1: 타입 변환 오류
+```
+Cannot convert value of type 'Swift.UnsafePointer<FisicaWorkout.PoseData>' 
+to expected argument type 'Swift.UnsafePointer<__ObjC.PoseData>'
+```
+
+#### 문제 2: __ObjC 타입 인식 오류
+```
+Cannot find type '__ObjC' in scope
+```
+
+#### 해결 방법
+
+이러한 문제들은 **Bridging Header**에서 타입 별칭을 정의하여 해결되었습니다:
+
+```objc
+// FisicaWorkout-Bridging-Header.h
+#import "segment_api.h"
+#import "segment_types.h"
+
+// Swift에서 타입 충돌을 방지하기 위한 별칭
+typedef PoseData CAPoseData;
+typedef PoseLandmark CAPoseLandmark;
+typedef Point3D CAPoint3D;
+typedef SegmentOutput CASegmentOutput;
+typedef PoseLandmarkType CAPoseLandmarkType;
+```
+
+**핵심 해결책:**
+1. **타입 별칭 사용**: `PoseData` → `CAPoseData`로 별칭을 만들어 Swift에서 명확하게 구분
+2. **Bridging Header 활용**: Objective-C 브릿지를 통해 C 타입을 Swift에서 안전하게 사용
+3. **withUnsafePointer 사용**: Swift에서 C 함수에 포인터를 안전하게 전달
+
 ### 방법 1: Objective-C Bridge 사용
 
 #### 1.1 Xcode 프로젝트 설정
@@ -27,9 +64,10 @@
 #import "segment_types.h"
 ```
 
-#### 1.3 Swift에서 사용
+#### 1.3 Swift에서 안전한 사용법
 ```swift
 import Foundation
+import GoogleMLKit
 
 class ExerciseSegmentManager {
     private var isInitialized = false
@@ -40,18 +78,28 @@ class ExerciseSegmentManager {
         return isInitialized
     }
     
-    func calibrate(basePose: PoseData) -> CalibrationData? {
-        guard isInitialized else { return nil }
+    func calibrateRecorder(with pose: Pose) -> Bool {
+        guard isInitialized else { return false }
         
-        var calibration = CalibrationData()
-        let result = segment_calibrate(&basePose, &calibration)
+        let poseData = convertMLKitPoseToPoseData(pose)
         
-        return (result == SEGMENT_OK) ? calibration : nil
+        let result = withUnsafePointer(to: poseData) { cPoseData in
+            segment_calibrate_recorder(cPoseData)
+        }
+        
+        return result == Int32(SEGMENT_OK.rawValue)
     }
     
-    func analyze(input: SegmentInput) -> SegmentOutput {
-        guard isInitialized else { return SegmentOutput() }
-        return segment_analyze(&input)
+    func recordPose(_ pose: Pose, name: String, jsonFile: String) -> Bool {
+        guard isInitialized else { return false }
+        
+        let poseData = convertMLKitPoseToPoseData(pose)
+        
+        let result = withUnsafePointer(to: poseData) { cPoseData in
+            segment_record_pose(cPoseData, name, jsonFile)
+        }
+        
+        return result == Int32(SEGMENT_OK.rawValue)
     }
     
     deinit {
@@ -61,6 +109,54 @@ class ExerciseSegmentManager {
     }
 }
 ```
+
+#### 1.4 Google ML Kit와의 통합 (실제 구현)
+```swift
+import GoogleMLKit
+
+extension ExerciseSegmentManager {
+    /// Google ML Kit Pose를 CAPoseData로 변환 (실제 해결된 방법)
+    private func convertMLKitPoseToPoseData(_ pose: Pose) -> CAPoseData {
+        var poseData = CAPoseData()
+        
+        // MLKit의 33개 랜드마크를 C API의 33개 랜드마크로 매핑
+        let landmarkMapping: [(MLKit.PoseLandmarkType, Int32)] = [
+            // 얼굴 (11개)
+            (.nose, 0), (.leftEyeInner, 1), (.leftEye, 2), (.leftEyeOuter, 3),
+            (.rightEyeInner, 4), (.rightEye, 5), (.rightEyeOuter, 6),
+            (.leftEar, 7), (.rightEar, 8), (.mouthLeft, 9), (.mouthRight, 10),
+            
+            // 상체 (12개)
+            (.leftShoulder, 11), (.rightShoulder, 12), (.leftElbow, 13), (.rightElbow, 14),
+            (.leftWrist, 15), (.rightWrist, 16), (.leftPinkyFinger, 17), (.rightPinkyFinger, 18),
+            (.leftIndexFinger, 19), (.rightIndexFinger, 20), (.leftThumb, 21), (.rightThumb, 22),
+            
+            // 하체 (10개)
+            (.leftHip, 23), (.rightHip, 24), (.leftKnee, 25), (.rightKnee, 26),
+            (.leftAnkle, 27), (.rightAnkle, 28), (.leftHeel, 29), (.rightHeel, 30),
+            (.leftAnkle, 31), (.rightAnkle, 32)  // 발가락 없음, 발목 재사용
+        ]
+        
+        for (mlKitType, cType) in landmarkMapping {
+            let landmark = pose.landmark(ofType: mlKitType)
+            
+            // C API 구조체에 직접 할당 (Bridging Header의 별칭 사용)
+            poseData.landmarks[Int(cType)].position.x = Float(landmark.position.x)
+            poseData.landmarks[Int(cType)].position.y = Float(landmark.position.y)
+            poseData.landmarks[Int(cType)].position.z = 0.0  // ML Kit는 2D만 제공
+            poseData.landmarks[Int(cType)].inFrameLikelihood = landmark.inFrameLikelihood
+        }
+        
+        poseData.timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
+        return poseData
+    }
+}
+```
+
+**핵심 포인트:**
+1. **CAPoseData 사용**: Bridging Header에서 정의한 별칭 타입 사용
+2. **직접 구조체 접근**: `poseData.landmarks[Int(cType)]`로 직접 배열에 접근
+3. **withUnsafePointer**: C 함수 호출 시 안전한 포인터 전달
 
 ### 방법 2: Swift Package Manager 사용
 

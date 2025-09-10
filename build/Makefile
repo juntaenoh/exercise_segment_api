@@ -233,45 +233,6 @@ realtime_demo/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/realtime_demo.dir/build.make CMakeFiles/realtime_demo.dir/build
 .PHONY : realtime_demo/fast
 
-#=============================================================================
-# Target rules for targets named test_math_utils
-
-# Build rule for target.
-test_math_utils: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_math_utils
-.PHONY : test_math_utils
-
-# fast build rule for target.
-test_math_utils/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_math_utils.dir/build.make CMakeFiles/test_math_utils.dir/build
-.PHONY : test_math_utils/fast
-
-#=============================================================================
-# Target rules for targets named test_calibration
-
-# Build rule for target.
-test_calibration: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_calibration
-.PHONY : test_calibration
-
-# fast build rule for target.
-test_calibration/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_calibration.dir/build.make CMakeFiles/test_calibration.dir/build
-.PHONY : test_calibration/fast
-
-#=============================================================================
-# Target rules for targets named test_pose_analysis
-
-# Build rule for target.
-test_pose_analysis: cmake_check_build_system
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_pose_analysis
-.PHONY : test_pose_analysis
-
-# fast build rule for target.
-test_pose_analysis/fast:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_pose_analysis.dir/build.make CMakeFiles/test_pose_analysis.dir/build
-.PHONY : test_pose_analysis/fast
-
 examples/basic_example.o: examples/basic_example.c.o
 .PHONY : examples/basic_example.o
 
@@ -428,78 +389,6 @@ src/segment_core.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/exercise_segment.dir/build.make CMakeFiles/exercise_segment.dir/src/segment_core.c.s
 .PHONY : src/segment_core.c.s
 
-tests/test_calibration.o: tests/test_calibration.c.o
-.PHONY : tests/test_calibration.o
-
-# target to build an object file
-tests/test_calibration.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_calibration.dir/build.make CMakeFiles/test_calibration.dir/tests/test_calibration.c.o
-.PHONY : tests/test_calibration.c.o
-
-tests/test_calibration.i: tests/test_calibration.c.i
-.PHONY : tests/test_calibration.i
-
-# target to preprocess a source file
-tests/test_calibration.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_calibration.dir/build.make CMakeFiles/test_calibration.dir/tests/test_calibration.c.i
-.PHONY : tests/test_calibration.c.i
-
-tests/test_calibration.s: tests/test_calibration.c.s
-.PHONY : tests/test_calibration.s
-
-# target to generate assembly for a file
-tests/test_calibration.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_calibration.dir/build.make CMakeFiles/test_calibration.dir/tests/test_calibration.c.s
-.PHONY : tests/test_calibration.c.s
-
-tests/test_math_utils.o: tests/test_math_utils.c.o
-.PHONY : tests/test_math_utils.o
-
-# target to build an object file
-tests/test_math_utils.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_math_utils.dir/build.make CMakeFiles/test_math_utils.dir/tests/test_math_utils.c.o
-.PHONY : tests/test_math_utils.c.o
-
-tests/test_math_utils.i: tests/test_math_utils.c.i
-.PHONY : tests/test_math_utils.i
-
-# target to preprocess a source file
-tests/test_math_utils.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_math_utils.dir/build.make CMakeFiles/test_math_utils.dir/tests/test_math_utils.c.i
-.PHONY : tests/test_math_utils.c.i
-
-tests/test_math_utils.s: tests/test_math_utils.c.s
-.PHONY : tests/test_math_utils.s
-
-# target to generate assembly for a file
-tests/test_math_utils.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_math_utils.dir/build.make CMakeFiles/test_math_utils.dir/tests/test_math_utils.c.s
-.PHONY : tests/test_math_utils.c.s
-
-tests/test_pose_analysis.o: tests/test_pose_analysis.c.o
-.PHONY : tests/test_pose_analysis.o
-
-# target to build an object file
-tests/test_pose_analysis.c.o:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_pose_analysis.dir/build.make CMakeFiles/test_pose_analysis.dir/tests/test_pose_analysis.c.o
-.PHONY : tests/test_pose_analysis.c.o
-
-tests/test_pose_analysis.i: tests/test_pose_analysis.c.i
-.PHONY : tests/test_pose_analysis.i
-
-# target to preprocess a source file
-tests/test_pose_analysis.c.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_pose_analysis.dir/build.make CMakeFiles/test_pose_analysis.dir/tests/test_pose_analysis.c.i
-.PHONY : tests/test_pose_analysis.c.i
-
-tests/test_pose_analysis.s: tests/test_pose_analysis.c.s
-.PHONY : tests/test_pose_analysis.s
-
-# target to generate assembly for a file
-tests/test_pose_analysis.c.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_pose_analysis.dir/build.make CMakeFiles/test_pose_analysis.dir/tests/test_pose_analysis.c.s
-.PHONY : tests/test_pose_analysis.c.s
-
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -518,9 +407,6 @@ help:
 	@echo "... exercise_segment"
 	@echo "... exercise_segment_static"
 	@echo "... realtime_demo"
-	@echo "... test_calibration"
-	@echo "... test_math_utils"
-	@echo "... test_pose_analysis"
 	@echo "... examples/basic_example.o"
 	@echo "... examples/basic_example.i"
 	@echo "... examples/basic_example.s"
@@ -539,15 +425,6 @@ help:
 	@echo "... src/segment_core.o"
 	@echo "... src/segment_core.i"
 	@echo "... src/segment_core.s"
-	@echo "... tests/test_calibration.o"
-	@echo "... tests/test_calibration.i"
-	@echo "... tests/test_calibration.s"
-	@echo "... tests/test_math_utils.o"
-	@echo "... tests/test_math_utils.i"
-	@echo "... tests/test_math_utils.s"
-	@echo "... tests/test_pose_analysis.o"
-	@echo "... tests/test_pose_analysis.i"
-	@echo "... tests/test_pose_analysis.s"
 .PHONY : help
 
 

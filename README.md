@@ -171,6 +171,43 @@ int main() {
 
 ## Swift 사용법 (v2.0.0)
 
+### ⚠️ Swift 사용 시 주의사항
+
+Swift에서 C API를 사용할 때 다음과 같은 타입 변환 문제가 발생할 수 있습니다:
+
+#### 문제 1: 타입 변환 오류
+```
+Cannot convert value of type 'Swift.UnsafePointer<FisicaWorkout.PoseData>' 
+to expected argument type 'Swift.UnsafePointer<__ObjC.PoseData>'
+```
+
+#### 문제 2: __ObjC 타입 인식 오류
+```
+Cannot find type '__ObjC' in scope
+```
+
+#### 해결 방법
+
+이러한 문제들은 **Bridging Header**에서 타입 별칭을 정의하여 해결되었습니다:
+
+```objc
+// FisicaWorkout-Bridging-Header.h
+#import "segment_api.h"
+#import "segment_types.h"
+
+// Swift에서 타입 충돌을 방지하기 위한 별칭
+typedef PoseData CAPoseData;
+typedef PoseLandmark CAPoseLandmark;
+typedef Point3D CAPoint3D;
+typedef SegmentOutput CASegmentOutput;
+typedef PoseLandmarkType CAPoseLandmarkType;
+```
+
+**핵심 해결책:**
+1. **타입 별칭 사용**: `PoseData` → `CAPoseData`로 별칭을 만들어 Swift에서 명확하게 구분
+2. **Bridging Header 활용**: Objective-C 브릿지를 통해 C 타입을 Swift에서 안전하게 사용
+3. **withUnsafePointer 사용**: Swift에서 C 함수에 포인터를 안전하게 전달
+
 ### CocoaPods 설치
 
 ```ruby
@@ -182,27 +219,77 @@ pod 'GoogleMLKit/PoseDetection', '~> 4.0'
 ### A 이용자 (기록자) - 워크아웃 생성
 
 ```swift
-import ExerciseSegmentAPI
-import MLKit
+import Foundation
+import GoogleMLKit
 
 class WorkoutRecorder: ObservableObject {
-    private let segmentManager = ExerciseSegmentManager()
+    private var isInitialized = false
     
-    func setupAsRecorder() throws {
+    func setupAsRecorder() -> Bool {
         // API 초기화
-        try segmentManager.initialize()
+        let result = segment_api_init()
+        isInitialized = (result == SEGMENT_OK)
+        return isInitialized
+    }
+    
+    func calibrateRecorder(with pose: Pose) -> Bool {
+        guard isInitialized else { return false }
         
-        // A의 기본 포즈로 캘리브레이션
-        let myBasePose = getMyNaturalPose() // MLKit Pose 객체
-        try segmentManager.calibrateRecorder(with: myBasePose)
+        let poseData = convertMLKitPoseToPoseData(pose)
+        
+        let result = withUnsafePointer(to: poseData) { cPoseData in
+            segment_calibrate_recorder(cPoseData)
+        }
+        
+        return result == Int32(SEGMENT_OK.rawValue)
     }
     
-    func recordPose(_ pose: Pose, name: String, workoutFile: String) throws {
-        try segmentManager.recordPose(pose, name: name, jsonFile: workoutFile)
+    func recordPose(_ pose: Pose, name: String, workoutFile: String) -> Bool {
+        guard isInitialized else { return false }
+        
+        let poseData = convertMLKitPoseToPoseData(pose)
+        
+        let result = withUnsafePointer(to: poseData) { cPoseData in
+            segment_record_pose(cPoseData, name, workoutFile)
+        }
+        
+        return result == Int32(SEGMENT_OK.rawValue)
     }
     
-    func finalizeWorkout(name: String, workoutFile: String) throws {
-        try segmentManager.finalizeWorkout(name: name, jsonFile: workoutFile)
+    func finalizeWorkout(name: String, workoutFile: String) -> Bool {
+        guard isInitialized else { return false }
+        
+        let result = segment_finalize_workout_json(name, workoutFile)
+        return result == Int32(SEGMENT_OK.rawValue)
+    }
+    
+    // Google ML Kit Pose를 CAPoseData로 변환
+    private func convertMLKitPoseToPoseData(_ pose: Pose) -> CAPoseData {
+        var poseData = CAPoseData()
+        
+        // MLKit의 33개 랜드마크를 C API의 33개 랜드마크로 매핑
+        let landmarkMapping: [(MLKit.PoseLandmarkType, Int32)] = [
+            (.nose, 0), (.leftEyeInner, 1), (.leftEye, 2), (.leftEyeOuter, 3),
+            (.rightEyeInner, 4), (.rightEye, 5), (.rightEyeOuter, 6),
+            (.leftEar, 7), (.rightEar, 8), (.mouthLeft, 9), (.mouthRight, 10),
+            (.leftShoulder, 11), (.rightShoulder, 12), (.leftElbow, 13), (.rightElbow, 14),
+            (.leftWrist, 15), (.rightWrist, 16), (.leftPinkyFinger, 17), (.rightPinkyFinger, 18),
+            (.leftIndexFinger, 19), (.rightIndexFinger, 20), (.leftThumb, 21), (.rightThumb, 22),
+            (.leftHip, 23), (.rightHip, 24), (.leftKnee, 25), (.rightKnee, 26),
+            (.leftAnkle, 27), (.rightAnkle, 28), (.leftHeel, 29), (.rightHeel, 30),
+            (.leftAnkle, 31), (.rightAnkle, 32)
+        ]
+        
+        for (mlKitType, cType) in landmarkMapping {
+            let landmark = pose.landmark(ofType: mlKitType)
+            poseData.landmarks[Int(cType)].position.x = Float(landmark.position.x)
+            poseData.landmarks[Int(cType)].position.y = Float(landmark.position.y)
+            poseData.landmarks[Int(cType)].position.z = 0.0
+            poseData.landmarks[Int(cType)].inFrameLikelihood = landmark.inFrameLikelihood
+        }
+        
+        poseData.timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
+        return poseData
     }
 }
 ```
@@ -210,33 +297,85 @@ class WorkoutRecorder: ObservableObject {
 ### B 이용자 (사용자) - 워크아웃 사용
 
 ```swift
-import ExerciseSegmentAPI
-import MLKit
+import Foundation
+import GoogleMLKit
 
-class ExerciseSegmentManager: ObservableObject {
-    private let segmentManager = ExerciseSegmentManager()
+class ExerciseSegmentUser: ObservableObject {
+    private var isInitialized = false
+    private var isCalibrated = false
+    private var isSegmentLoaded = false
     
-    func setupAsUser() throws {
+    func setupAsUser() -> Bool {
         // API 초기화
-        try segmentManager.initialize()
+        let result = segment_api_init()
+        isInitialized = (result == SEGMENT_OK)
+        return isInitialized
+    }
+    
+    func calibrateUser(with pose: Pose) -> Bool {
+        guard isInitialized else { return false }
         
-        // B의 기본 포즈로 캘리브레이션
-        let myBasePose = getMyNaturalPose() // MLKit Pose 객체
-        try segmentManager.calibrateUser(with: myBasePose)
+        let poseData = convertMLKitPoseToPoseData(pose)
+        
+        let result = withUnsafePointer(to: poseData) { cPoseData in
+            segment_calibrate_user(cPoseData)
+        }
+        
+        isCalibrated = (result == Int32(SEGMENT_OK.rawValue))
+        return isCalibrated
     }
     
-    func loadSegment(workoutFile: String, startIndex: Int, endIndex: Int) throws {
-        try segmentManager.loadSegment(jsonFile: workoutFile, 
-                                     startIndex: startIndex, 
-                                     endIndex: endIndex)
+    func loadSegment(workoutFile: String, startIndex: Int, endIndex: Int) -> Bool {
+        guard isInitialized && isCalibrated else { return false }
+        
+        let result = segment_load_segment(workoutFile, Int32(startIndex), Int32(endIndex))
+        isSegmentLoaded = (result == Int32(SEGMENT_OK.rawValue))
+        return isSegmentLoaded
     }
     
-    func analyzeCurrentPose(_ pose: Pose) throws -> SegmentOutput {
-        return try segmentManager.analyze(pose)
+    func analyzeCurrentPose(_ pose: Pose) -> (progress: Float, completed: Bool, similarity: Float)? {
+        guard isInitialized && isSegmentLoaded else { return nil }
+        
+        let poseData = convertMLKitPoseToPoseData(pose)
+        
+        var progress: Float = 0.0
+        var completed: Bool = false
+        var similarity: Float = 0.0
+        
+        let result = withUnsafePointer(to: poseData) { cPoseData in
+            segment_analyze_simple(cPoseData, &progress, &completed, &similarity, nil)
+        }
+        
+        guard result == Int32(SEGMENT_OK.rawValue) else { return nil }
+        return (progress: progress, completed: completed, similarity: similarity)
     }
     
-    func getTargetPose() throws -> PoseData {
-        return try segmentManager.getTransformedEndPose()
+    // Google ML Kit Pose를 CAPoseData로 변환 (동일한 변환 함수)
+    private func convertMLKitPoseToPoseData(_ pose: Pose) -> CAPoseData {
+        var poseData = CAPoseData()
+        
+        let landmarkMapping: [(MLKit.PoseLandmarkType, Int32)] = [
+            (.nose, 0), (.leftEyeInner, 1), (.leftEye, 2), (.leftEyeOuter, 3),
+            (.rightEyeInner, 4), (.rightEye, 5), (.rightEyeOuter, 6),
+            (.leftEar, 7), (.rightEar, 8), (.mouthLeft, 9), (.mouthRight, 10),
+            (.leftShoulder, 11), (.rightShoulder, 12), (.leftElbow, 13), (.rightElbow, 14),
+            (.leftWrist, 15), (.rightWrist, 16), (.leftPinkyFinger, 17), (.rightPinkyFinger, 18),
+            (.leftIndexFinger, 19), (.rightIndexFinger, 20), (.leftThumb, 21), (.rightThumb, 22),
+            (.leftHip, 23), (.rightHip, 24), (.leftKnee, 25), (.rightKnee, 26),
+            (.leftAnkle, 27), (.rightAnkle, 28), (.leftHeel, 29), (.rightHeel, 30),
+            (.leftAnkle, 31), (.rightAnkle, 32)
+        ]
+        
+        for (mlKitType, cType) in landmarkMapping {
+            let landmark = pose.landmark(ofType: mlKitType)
+            poseData.landmarks[Int(cType)].position.x = Float(landmark.position.x)
+            poseData.landmarks[Int(cType)].position.y = Float(landmark.position.y)
+            poseData.landmarks[Int(cType)].position.z = 0.0
+            poseData.landmarks[Int(cType)].inFrameLikelihood = landmark.inFrameLikelihood
+        }
+        
+        poseData.timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
+        return poseData
     }
 }
 ```
@@ -244,28 +383,42 @@ class ExerciseSegmentManager: ObservableObject {
 ### 고급 사용법
 
 ```swift
-// 직접 C API 사용
-let result = segment_create_with_indices(
-    &startPoseData,
-    &endPoseData,
-    &calibrationData,
-    jointIndices,
-    Int32(jointIndices.count)
-)
+// 직접 C API 사용 (withUnsafePointer로 안전한 포인터 전달)
+let startPoseData = convertMLKitPoseToPoseData(startPose)
+let endPoseData = convertMLKitPoseToPoseData(endPose)
+let calibrationData = getCalibrationData()
 
-// 단순화된 분석
+let result = withUnsafePointer(to: startPoseData) { startPtr in
+    withUnsafePointer(to: endPoseData) { endPtr in
+        withUnsafePointer(to: calibrationData) { calPtr in
+            segment_create_with_indices(
+                startPtr,
+                endPtr,
+                calPtr,
+                jointIndices,
+                Int32(jointIndices.count)
+            )
+        }
+    }
+}
+
+// 단순화된 분석 (실제 해결된 방법)
 var progress: Float = 0.0
 var isComplete: Bool = false
 var similarity: Float = 0.0
-var corrections: [Point3D] = Array(repeating: Point3D(x: 0, y: 0, z: 0), count: 13)
+var corrections: [CAPoint3D] = Array(repeating: CAPoint3D(x: 0, y: 0, z: 0), count: 33)
 
-let result = segment_analyze_simple(
-    &currentPoseData,
-    &progress,
-    &isComplete,
-    &similarity,
-    &corrections
-)
+let currentPoseData = convertMLKitPoseToPoseData(currentPose)
+
+let result = withUnsafePointer(to: currentPoseData) { posePtr in
+    segment_analyze_simple(
+        posePtr,
+        &progress,
+        &isComplete,
+        &similarity,
+        &corrections
+    )
+}
 ```
 
 자세한 Swift 사용법은 [SWIFT_USAGE.md](SWIFT_USAGE.md)를 참조하세요.

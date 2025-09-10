@@ -1,230 +1,161 @@
 /**
  * @file realtime_demo.c
- * @brief 실시간 포즈 입력 시뮬레이션 데모
+ * @brief Exercise Segment API 실시간 데모 (ML Kit 33개 랜드마크 지원)
  * @author Exercise Segment API Team
- * @version 1.0.0
+ * @version 2.0.0
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
-#include <math.h>
-#include "segment_api.h"
+#include "../include/segment_api.h"
 
-// 실시간 시뮬레이션을 위한 더미 데이터 생성 함수들
-void create_base_pose(PoseData* pose) {
-    // 자연스러운 서있는 자세
-    pose->joints[JOINT_NOSE] = (Point3D){0.0f, -10.0f, 0.0f};
-    pose->joints[JOINT_LEFT_SHOULDER] = (Point3D){-20.0f, 0.0f, 0.0f};
-    pose->joints[JOINT_RIGHT_SHOULDER] = (Point3D){20.0f, 0.0f, 0.0f};
-    pose->joints[JOINT_LEFT_ELBOW] = (Point3D){-30.0f, 20.0f, 0.0f};
-    pose->joints[JOINT_RIGHT_ELBOW] = (Point3D){30.0f, 20.0f, 0.0f};
-    pose->joints[JOINT_LEFT_WRIST] = (Point3D){-40.0f, 40.0f, 0.0f};
-    pose->joints[JOINT_RIGHT_WRIST] = (Point3D){40.0f, 40.0f, 0.0f};
-    pose->joints[JOINT_LEFT_HIP] = (Point3D){-10.0f, 50.0f, 0.0f};
-    pose->joints[JOINT_RIGHT_HIP] = (Point3D){10.0f, 50.0f, 0.0f};
-    pose->joints[JOINT_LEFT_KNEE] = (Point3D){-10.0f, 80.0f, 0.0f};
-    pose->joints[JOINT_RIGHT_KNEE] = (Point3D){10.0f, 80.0f, 0.0f};
-    pose->joints[JOINT_LEFT_ANKLE] = (Point3D){-10.0f, 110.0f, 0.0f};
-    pose->joints[JOINT_RIGHT_ANKLE] = (Point3D){10.0f, 110.0f, 0.0f};
+// 샘플 포즈 데이터 생성 함수
+void create_sample_pose(PoseData* pose, float offset_x, float offset_y, float offset_z) {
+    if (!pose) return;
     
-    // 모든 관절의 신뢰도를 높게 설정
-    for (int i = 0; i < JOINT_COUNT; i++) {
-        pose->confidence[i] = 0.9f;
+    // 기본 관절 위치 설정 (자연스러운 서있는 자세)
+    // 주요 관절들만 설정 (ML Kit 33개 랜드마크 중 일부)
+    pose->landmarks[POSE_LANDMARK_NOSE] = (PoseLandmark){{0.0f + offset_x, -10.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_LEFT_SHOULDER] = (PoseLandmark){{-20.0f + offset_x, 0.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_RIGHT_SHOULDER] = (PoseLandmark){{20.0f + offset_x, 0.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_LEFT_ELBOW] = (PoseLandmark){{-30.0f + offset_x, 20.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_RIGHT_ELBOW] = (PoseLandmark){{30.0f + offset_x, 20.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_LEFT_WRIST] = (PoseLandmark){{-40.0f + offset_x, 40.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_RIGHT_WRIST] = (PoseLandmark){{40.0f + offset_x, 40.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_LEFT_HIP] = (PoseLandmark){{-10.0f + offset_x, 50.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_RIGHT_HIP] = (PoseLandmark){{10.0f + offset_x, 50.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_LEFT_KNEE] = (PoseLandmark){{-10.0f + offset_x, 80.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_RIGHT_KNEE] = (PoseLandmark){{10.0f + offset_x, 80.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_LEFT_ANKLE] = (PoseLandmark){{-10.0f + offset_x, 110.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    pose->landmarks[POSE_LANDMARK_RIGHT_ANKLE] = (PoseLandmark){{10.0f + offset_x, 110.0f + offset_y, 0.0f + offset_z}, 0.9f};
+    
+    // 나머지 랜드마크들은 기본값으로 설정
+    for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+        if (pose->landmarks[i].inFrameLikelihood == 0.0f) {
+            pose->landmarks[i] = (PoseLandmark){{0.0f, 0.0f, 0.0f}, 0.0f};
+        }
     }
-    pose->timestamp = (uint64_t)time(NULL) * 1000;
+    
+    pose->timestamp = (uint64_t)time(NULL) * 1000;  // 현재 시간 (밀리초)
 }
 
+// 스쿼트 시작 포즈 생성
 void create_squat_start_pose(PoseData* pose) {
-    create_base_pose(pose);
+    create_sample_pose(pose, 0.0f, 0.0f, 0.0f);
 }
 
+// 스쿼트 끝 포즈 생성 (무릎을 구부린 상태)
 void create_squat_end_pose(PoseData* pose) {
-    create_base_pose(pose);
+    create_sample_pose(pose, 0.0f, 0.0f, 0.0f);
     
-    // 스쿼트 종료 자세 (무릎을 구부리고 골반을 낮춤)
-    pose->joints[JOINT_LEFT_KNEE].y += 30.0f;  // 무릎을 아래로
-    pose->joints[JOINT_RIGHT_KNEE].y += 30.0f;
-    pose->joints[JOINT_LEFT_HIP].y += 20.0f;   // 골반을 아래로
-    pose->joints[JOINT_RIGHT_HIP].y += 20.0f;
+    // 무릎과 골반을 아래로 이동
+    pose->landmarks[POSE_LANDMARK_LEFT_KNEE].position.y += 30.0f;  // 무릎을 아래로
+    pose->landmarks[POSE_LANDMARK_RIGHT_KNEE].position.y += 30.0f;
+    pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.y += 20.0f;   // 골반을 아래로
+    pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.y += 20.0f;
 }
 
-// 실시간 포즈 생성 (진행도에 따른 보간 + 노이즈)
-void create_realtime_pose(PoseData* pose, float progress, float noise_level) {
-    PoseData start, end;
-    create_squat_start_pose(&start);
-    create_squat_end_pose(&end);
+// 두 포즈 간 보간
+void interpolate_poses(const PoseData* start, const PoseData* end, float progress, PoseData* result) {
+    if (!start || !end || !result) return;
     
-    // 선형 보간으로 기본 포즈 생성
-    for (int i = 0; i < JOINT_COUNT; i++) {
-        pose->joints[i].x = start.joints[i].x + progress * (end.joints[i].x - start.joints[i].x);
-        pose->joints[i].y = start.joints[i].y + progress * (end.joints[i].y - start.joints[i].y);
-        pose->joints[i].z = start.joints[i].z + progress * (end.joints[i].z - start.joints[i].z);
-        
-        // 실시간 노이즈 추가 (실제 센서 노이즈 시뮬레이션)
-        pose->joints[i].x += (float)(rand() % 100 - 50) / 100.0f * noise_level;
-        pose->joints[i].y += (float)(rand() % 100 - 50) / 100.0f * noise_level;
-        pose->joints[i].z += (float)(rand() % 100 - 50) / 100.0f * noise_level;
-        
-        pose->confidence[i] = 0.9f - (float)(rand() % 20) / 100.0f; // 약간의 신뢰도 변동
+    for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+        result->landmarks[i].position.x = start->landmarks[i].position.x + progress * (end->landmarks[i].position.x - start->landmarks[i].position.x);
+        result->landmarks[i].position.y = start->landmarks[i].position.y + progress * (end->landmarks[i].position.y - start->landmarks[i].position.y);
+        result->landmarks[i].position.z = start->landmarks[i].position.z + progress * (end->landmarks[i].position.z - start->landmarks[i].position.z);
+        result->landmarks[i].inFrameLikelihood = start->landmarks[i].inFrameLikelihood;
     }
-    pose->timestamp = (uint64_t)time(NULL) * 1000 + (uint64_t)(progress * 1000);
-}
-
-// 실시간 분석 결과 출력
-void print_realtime_analysis(int frame_count, const SegmentOutput* output, float target_progress) {
-    printf("Frame %3d | 진행도: %5.2f (목표: %5.2f) | 완료: %s | 유사도: %5.2f | ",
-           frame_count, output->progress, target_progress, 
-           output->completed ? "예" : "아니오", output->similarity);
-    
-    // 주요 관절 교정 벡터 출력 (무릎과 골반)
-    printf("무릎: (%.1f,%.1f,%.1f) (%.1f,%.1f,%.1f) | ",
-           output->corrections[JOINT_LEFT_KNEE].x,
-           output->corrections[JOINT_LEFT_KNEE].y,
-           output->corrections[JOINT_LEFT_KNEE].z,
-           output->corrections[JOINT_RIGHT_KNEE].x,
-           output->corrections[JOINT_RIGHT_KNEE].y,
-           output->corrections[JOINT_RIGHT_KNEE].z);
-    
-    printf("골반: (%.1f,%.1f,%.1f) (%.1f,%.1f,%.1f)\n",
-           output->corrections[JOINT_LEFT_HIP].x,
-           output->corrections[JOINT_LEFT_HIP].y,
-           output->corrections[JOINT_LEFT_HIP].z,
-           output->corrections[JOINT_RIGHT_HIP].x,
-           output->corrections[JOINT_RIGHT_HIP].y,
-           output->corrections[JOINT_RIGHT_HIP].z);
-}
-
-// 진행률 바 출력
-void print_progress_bar(float progress, int width) {
-    printf("[");
-    int pos = (int)(progress * width);
-    for (int i = 0; i < width; i++) {
-        if (i < pos) printf("█");
-        else if (i == pos) printf("▌");
-        else printf("░");
-    }
-    printf("] %3.0f%%", progress * 100);
+    result->timestamp = start->timestamp;
 }
 
 int main() {
-    printf("=== 실시간 포즈 분석 시뮬레이션 ===\n\n");
-    
-    // 랜덤 시드 설정
-    srand((unsigned int)time(NULL));
+    printf("=== Exercise Segment API 실시간 데모 (ML Kit 33개 랜드마크) ===\n\n");
     
     // 1. API 초기화
     printf("1. API 초기화 중...\n");
     int result = segment_api_init();
     if (result != SEGMENT_OK) {
-        printf("❌ 초기화 실패: %s\n", segment_get_error_message(result));
-        return -1;
+        printf("❌ API 초기화 실패: %d\n", result);
+        return 1;
     }
-    printf("✅ 초기화 성공!\n\n");
+    printf("✅ API 초기화 성공\n\n");
     
     // 2. 캘리브레이션
-    printf("2. 사용자 캘리브레이션 중...\n");
+    printf("2. 캘리브레이션 수행 중...\n");
     PoseData base_pose;
-    create_base_pose(&base_pose);
+    create_sample_pose(&base_pose, 0.0f, 0.0f, 0.0f);
     
-    CalibrationData calibration;
-    result = segment_calibrate(&base_pose, &calibration);
+    result = segment_calibrate_recorder(&base_pose);
     if (result != SEGMENT_OK) {
-        printf("❌ 캘리브레이션 실패: %s\n", segment_get_error_message(result));
+        printf("❌ 캘리브레이션 실패: %d\n", result);
         segment_api_cleanup();
-        return -1;
+        return 1;
     }
-    printf("✅ 캘리브레이션 성공! (스케일: %.2f, 품질: %.2f)\n\n", 
-           calibration.scale_factor, calibration.calibration_quality);
+    printf("✅ 캘리브레이션 성공\n\n");
     
-    // 3. 스쿼트 세그먼트 생성
-    printf("3. 스쿼트 운동 세그먼트 생성 중...\n");
-    PoseData start_keypose, end_keypose;
-    create_squat_start_pose(&start_keypose);
-    create_squat_end_pose(&end_keypose);
+    // 3. 실시간 스쿼트 운동 시뮬레이션
+    printf("3. 실시간 스쿼트 운동 시뮬레이션...\n");
+    printf("   (Ctrl+C로 종료)\n\n");
     
-    JointType care_joints[] = {
-        JOINT_LEFT_KNEE, JOINT_RIGHT_KNEE, 
-        JOINT_LEFT_HIP, JOINT_RIGHT_HIP
-    };
+    PoseData start_pose, end_pose;
+    create_squat_start_pose(&start_pose);
+    create_squat_end_pose(&end_pose);
     
-    result = segment_create(&start_keypose, &end_keypose, &calibration, 
-                           care_joints, 4);
-    if (result != SEGMENT_OK) {
-        printf("❌ 세그먼트 생성 실패: %s\n", segment_get_error_message(result));
-        segment_api_cleanup();
-        return -1;
-    }
-    printf("✅ 세그먼트 생성 성공!\n\n");
+    int frame_count = 0;
+    float direction = 1.0f;  // 1.0: 아래로, -1.0: 위로
+    float current_progress = 0.0f;
     
-    // 4. 실시간 분석 시뮬레이션
-    printf("4. 실시간 분석 시뮬레이션 시작...\n");
-    printf("   (60fps 시뮬레이션, 실제로는 16ms 간격)\n\n");
-    
-    printf("Frame | 진행도 (목표) | 완료 | 유사도 | 교정 벡터 (무릎, 골반)\n");
-    printf("------|---------------|------|--------|----------------------\n");
-    
-    // 스쿼트 운동 시뮬레이션 (0.0 → 1.0 → 0.0)
-    int total_frames = 120; // 2초간 60fps
-    float max_noise = 2.0f; // 노이즈 레벨
-    
-    for (int frame = 0; frame < total_frames; frame++) {
-        // 운동 진행도 계산 (0.0 → 1.0 → 0.0)
-        float target_progress;
-        if (frame < total_frames / 2) {
-            // 내려가는 동작 (0.0 → 1.0)
-            target_progress = (float)frame / (total_frames / 2);
-        } else {
-            // 올라오는 동작 (1.0 → 0.0)
-            target_progress = 2.0f - (float)frame / (total_frames / 2);
+    while (1) {
+        // 운동 진행도 계산 (사인파 패턴)
+        current_progress += direction * 0.05f;
+        if (current_progress >= 1.0f) {
+            current_progress = 1.0f;
+            direction = -1.0f;  // 위로 올라가기
+        } else if (current_progress <= 0.0f) {
+            current_progress = 0.0f;
+            direction = 1.0f;   // 아래로 내려가기
         }
         
-        // 실시간 포즈 생성 (노이즈 포함)
+        // 현재 포즈 생성
         PoseData current_pose;
-        create_realtime_pose(&current_pose, target_progress, max_noise);
+        interpolate_poses(&start_pose, &end_pose, current_progress, &current_pose);
         
         // 분석 수행
-        SegmentInput input = {current_pose};
-        SegmentOutput output = segment_analyze(&input);
+        float out_progress, out_similarity;
+        bool out_is_complete;
+        Point3D out_corrections[POSE_LANDMARK_COUNT];
         
-        // 결과 출력
-        print_realtime_analysis(frame + 1, &output, target_progress);
+        result = segment_analyze_simple(&current_pose, &out_progress, &out_is_complete, &out_similarity, out_corrections);
         
-        // 진행률 바 출력 (10프레임마다)
-        if (frame % 10 == 0) {
-            printf(" | ");
-            print_progress_bar(output.progress, 20);
+        if (result == SEGMENT_OK) {
+            // 진행률 바 생성
+            int bar_length = 20;
+            int filled_length = (int)(current_progress * bar_length);
+            
+            printf("\r프레임 %4d | 진행도: [", frame_count);
+            for (int i = 0; i < bar_length; i++) {
+                if (i < filled_length) {
+                    printf("█");
+                } else {
+                    printf("░");
+                }
+            }
+            printf("] %.1f%% | 완료: %s | 유사도: %.2f", 
+                   current_progress * 100, out_is_complete ? "예" : "아니오", out_similarity);
+            fflush(stdout);
+        } else {
+            printf("\r❌ 분석 실패: %d", result);
         }
-        printf("\n");
         
-        // 실시간 시뮬레이션을 위한 지연 (실제로는 16ms)
-        usleep(16000); // 16ms = 60fps
-        
-        // 30프레임마다 요약 출력
-        if ((frame + 1) % 30 == 0) {
-            printf("\n--- %d프레임 요약 ---\n", frame + 1);
-            printf("현재 진행도: %.2f, 목표 진행도: %.2f, 오차: %.2f\n", 
-                   output.progress, target_progress, 
-                   fabsf(output.progress - target_progress));
-            printf("완료 상태: %s, 유사도: %.2f\n\n", 
-                   output.completed ? "완료" : "진행중", output.similarity);
-        }
+        frame_count++;
+        usleep(100000);  // 100ms 대기 (10 FPS)
     }
     
-    // 5. 최종 통계
-    printf("\n=== 실시간 분석 완료 ===\n");
-    printf("✅ 총 %d 프레임 처리 완료\n", total_frames);
-    printf("✅ 60fps 실시간 처리 시뮬레이션 성공\n");
-    printf("✅ 노이즈가 포함된 포즈 데이터에서도 안정적 분석\n");
-    printf("✅ 진행도 추적 및 교정 벡터 생성 정상 작동\n\n");
-    
-    // 6. 정리
-    printf("6. 시스템 정리 중...\n");
-    segment_destroy();
+    printf("\n\n4. 정리 중...\n");
     segment_api_cleanup();
-    printf("✅ 정리 완료!\n");
+    printf("✅ 정리 완료\n");
     
-    printf("\n🎉 실시간 포즈 분석 API 데모 완료!\n");
     return 0;
 }

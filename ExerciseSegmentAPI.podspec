@@ -1,29 +1,39 @@
 Pod::Spec.new do |spec|
   spec.name         = "ExerciseSegmentAPI"
-  spec.version      = "1.1.0"
-  spec.summary      = "Exercise Segment Analysis API for iOS/macOS"
-  spec.description  = "A high-performance C API for real-time exercise segment analysis using Google ML Kit pose data."
+  spec.version      = "2.0.0"
+  spec.summary      = "Exercise Segment Analysis API v2.0.0"
+  spec.description  = <<-DESC
+                     A C API for analyzing exercise progress and providing real-time feedback based on Google ML Kit pose data.
+                     
+                     Features:
+                     - 33 landmark pose analysis
+                     - Real-time progress tracking
+                     - JSON-based workout storage
+                     - Calibration system
+                     - Swift integration support
+                     DESC
 
-  spec.homepage     = "https://github.com/juntaenoh/exercise_segment_api"
+  spec.homepage     = "https://github.com/your-org/exercise_segment_api"
   spec.license      = { :type => "MIT", :file => "LICENSE" }
-  spec.author       = { "Juntae Noh" => "njt9905@naver.com" }
+  spec.author       = { "Your Name" => "your.email@example.com" }
 
-  spec.ios.deployment_target = "12.0"
-  spec.osx.deployment_target = "10.15"
+  spec.platform     = :ios, "16.0"
+  spec.source       = { :path => "." }
 
-  spec.source       = { :git => "https://github.com/juntaenoh/exercise_segment_api.git", :tag => "v#{spec.version}" }
+  spec.source_files = [
+    "include/**/*.h",
+    "src/**/*.c"
+  ]
 
-  spec.source_files = "include/*.h", "src/*.c"
-  spec.public_header_files = "include/*.h"
-  spec.libraries = "m"
+  spec.public_header_files = "include/**/*.h"
+  
   spec.requires_arc = false
   
-  # Swift 지원 (선택적)
-  spec.swift_version = "5.0"
+  spec.pod_target_xcconfig = {
+    'HEADER_SEARCH_PATHS' => '$(PODS_TARGET_SRCROOT)/include'
+  }
   
-  # MLKit 의존성은 선택적 (사용자가 직접 추가)
-  # spec.dependency 'GoogleMLKit/PoseDetection', '~> 4.0'
-  
-  # 정적 라이브러리 충돌 방지
-  spec.static_framework = true
+  spec.user_target_xcconfig = {
+    'HEADER_SEARCH_PATHS' => '$(PODS_TARGET_SRCROOT)/include'
+  }
 end

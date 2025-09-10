@@ -57,7 +57,4 @@ set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/exercise_segment.dir/DependInfo.cmake"
   "CMakeFiles/example_basic.dir/DependInfo.cmake"
   "CMakeFiles/realtime_demo.dir/DependInfo.cmake"
-  "CMakeFiles/test_math_utils.dir/DependInfo.cmake"
-  "CMakeFiles/test_calibration.dir/DependInfo.cmake"
-  "CMakeFiles/test_pose_analysis.dir/DependInfo.cmake"
   )

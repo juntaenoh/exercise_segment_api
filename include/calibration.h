@@ -57,6 +57,12 @@ int apply_calibration_to_pose(const PoseData* original_pose,
 float calculate_pose_scale_factor(const PoseData* pose);
 
 /**
+ * @brief 현재 캘리브레이션 데이터 가져오기
+ * @return 캘리브레이션 데이터 포인터 (없으면 NULL)
+ */
+CalibrationData* get_calibration_data(void);
+
+/**
  * @brief 포즈의 중심점 계산
  * @param pose 포즈 데이터
  * @return 중심점
