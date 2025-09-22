@@ -1,21 +1,23 @@
 Pod::Spec.new do |spec|
   spec.name         = "ExerciseSegmentAPI"
-  spec.version      = "2.0.0"
-  spec.summary      = "Exercise Segment Analysis API v2.0.0"
+  spec.version      = "2.1.0"
+  spec.summary      = "Exercise Segment Analysis API v2.1.0"
   spec.description  = <<-DESC
                      A C API for analyzing exercise progress and providing real-time feedback based on Google ML Kit pose data.
                      
                      Features:
                      - 33 landmark pose analysis
-                     - Real-time progress tracking
+                     - Real-time progress tracking (60fps)
                      - JSON-based workout storage
-                     - Calibration system
-                     - Swift integration support
+                     - User role separation (Recorder/User)
+                     - Smart pose analysis with user position adaptation
+                     - Enhanced segment management
+                     - Swift integration support with type safety
                      DESC
 
   spec.homepage     = "https://github.com/your-org/exercise_segment_api"
   spec.license      = { :type => "MIT", :file => "LICENSE" }
-  spec.author       = { "Your Name" => "your.email@example.com" }
+  spec.author       = { "Exercise Segment API Team" => "contact@exercisesegmentapi.com" }
 
   spec.platform     = :ios, "16.0"
   spec.source       = { :path => "." }

@@ -92,40 +92,6 @@ int segment_finalize_workout_json(const char *workout_name,
 int segment_calibrate_user(const PoseData *base_pose);
 
 /**
- * @brief JSON 파일에서 세그먼트 로드
- * @param json_file_path JSON 파일 경로
- * @param start_index 시작 포즈 인덱스
- * @param end_index 종료 포즈 인덱스
- * @return SEGMENT_OK 성공, 음수 에러 코드
- *
- * JSON 파일에서 두 개의 인덱스로 포즈를 로드하고, 이상적 비율의 포즈를
- * B의 체형에 맞게 변환하여 내부에 저장합니다.
- * segment_calibrate_user()가 먼저 호출되어야 합니다.
- */
-int segment_load_segment(const char *json_file_path, int start_index,
-                         int end_index);
-
-/**
- * @brief 실시간 포즈 분석 및 피드백 생성
- * @param current_pose B 이용자의 현재 포즈 데이터
- * @return 분석 결과 구조체
- *
- * B의 현재 포즈를 로드된 세그먼트의 시작→종료 포즈와 비교하여
- * 진행도, 교정 벡터, 완료 여부를 계산합니다.
- */
-SegmentOutput segment_analyze(const PoseData *current_pose);
-
-/**
- * @brief 현재 세그먼트의 변환된 종료 포즈 반환
- * @param out_pose 변환된 종료 포즈를 저장할 구조체
- * @return SEGMENT_OK 성공, 음수 에러 코드
- *
- * 현재 로드된 세그먼트의 종료 포즈를 B의 체형에 맞게 변환된 상태로 반환합니다.
- * B가 최종적으로 도달해야 하는 목표 포즈입니다.
- */
-int segment_get_transformed_end_pose(PoseData *out_pose);
-
-/**
  * @brief 현재 세그먼트를 초기 상태로 리셋
  * @return SEGMENT_OK 성공, 음수 에러 코드
  *
@@ -187,6 +153,53 @@ int segment_analyze_simple(const PoseData *current_pose, float *out_progress,
  * @return SEGMENT_OK 성공, 음수 에러 코드
  */
 int segment_create_pose_data(const PoseLandmark *landmarks, PoseData *out_pose);
+
+// MARK: - 향상된 세그먼트 관리 API (v2.1.0)
+
+/**
+ * @brief JSON 파일에서 모든 세그먼트를 미리 로드
+ * @param json_file_path JSON 파일 경로
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ *
+ * JSON 파일에서 모든 포즈를 한 번에 읽어서 사용자 체형에 맞게 변환하여 메모리에
+ * 캐시합니다. 이후 segment_set_current_segment()로 빠르게 세그먼트를 선택할 수
+ * 있습니다. segment_calibrate_user()가 먼저 호출되어야 합니다.
+ */
+int segment_load_all_segments(const char *json_file_path);
+
+/**
+ * @brief 미리 로드된 세그먼트에서 현재 사용할 세그먼트 선택
+ * @param start_index 시작 포즈 인덱스
+ * @param end_index 종료 포즈 인덱스
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ *
+ * segment_load_all_segments()로 미리 로드된 포즈들 중에서
+ * 지정된 인덱스의 시작/종료 포즈를 현재 세그먼트로 설정합니다.
+ */
+int segment_set_current_segment(int start_index, int end_index);
+
+/**
+ * @brief 실시간 포즈 분석 (사용자 위치 기준 목표 포즈)
+ * @param current_pose 현재 사용자 포즈
+ * @param out_progress 진행도 출력 (0.0~1.0)
+ * @param out_similarity 유사도 출력 (0.0~1.0)
+ * @param out_is_complete 완료 여부 출력
+ * @param out_corrections 교정 벡터 배열 출력 (33개 랜드마크)
+ * @param out_target_pose 사용자 위치 기준으로 맞춰진 목표 포즈
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ */
+int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
+                          float *out_similarity, bool *out_is_complete,
+                          Point3D *out_corrections, PoseData *out_target_pose);
+
+/**
+ * @brief 세그먼트 정보 조회
+ * @param out_segment_count 총 세그먼트 개수 출력
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ *
+ * 현재 로드된 세그먼트의 총 개수를 반환합니다.
+ */
+int segment_get_segment_info(int *out_segment_count);
 
 // MARK: - Swift 호환성을 위한 함수들
 

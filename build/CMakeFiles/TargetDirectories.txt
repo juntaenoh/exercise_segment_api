@@ -2,6 +2,11 @@
 /Users/nojuntae/exercise_segment_api/build/CMakeFiles/exercise_segment.dir
 /Users/nojuntae/exercise_segment_api/build/CMakeFiles/example_basic.dir
 /Users/nojuntae/exercise_segment_api/build/CMakeFiles/realtime_demo.dir
+/Users/nojuntae/exercise_segment_api/build/CMakeFiles/smart_demo.dir
+/Users/nojuntae/exercise_segment_api/build/CMakeFiles/test_foot_center.dir
+/Users/nojuntae/exercise_segment_api/build/CMakeFiles/test_realtime_feedback.dir
+/Users/nojuntae/exercise_segment_api/build/CMakeFiles/test_simple_feedback.dir
+/Users/nojuntae/exercise_segment_api/build/CMakeFiles/test_joint_calibration.dir
 /Users/nojuntae/exercise_segment_api/build/CMakeFiles/package.dir
 /Users/nojuntae/exercise_segment_api/build/CMakeFiles/package_source.dir
 /Users/nojuntae/exercise_segment_api/build/CMakeFiles/edit_cache.dir

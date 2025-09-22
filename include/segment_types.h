@@ -128,14 +128,45 @@ typedef PoseLandmark SegmentPoseLandmark;
 #endif
 
 /**
+ * @brief 관절 간 연결 관계 정의
+ * 관절별 길이 켈리브레이션을 위한 연결 정보
+ */
+typedef struct {
+  PoseLandmarkType from_joint; /* 시작 관절 */
+  PoseLandmarkType to_joint;   /* 끝 관절 */
+  const char *name;            /* 연결 이름 (예: "상완", "대퇴") */
+} JointConnection;
+
+/**
+ * @brief 관절별 길이 정보
+ * 각 관절 간의 길이와 스케일 팩터
+ */
+typedef struct {
+  float ideal_length; /* 이상적 길이 (표준 포즈 기준) */
+  float user_length;  /* 사용자 실제 길이 */
+  float scale_factor; /* 사용자/이상적 비율 */
+  bool is_valid;      /* 유효한 측정인지 여부 */
+} JointLength;
+
+/**
+ * @brief 관절별 길이 켈리브레이션 데이터
+ * 모든 관절 간 연결의 길이 정보
+ */
+typedef struct {
+  JointLength lengths[20]; /* 주요 관절 연결들 (최대 20개) */
+  int count;               /* 실제 연결 개수 */
+} JointLengthCalibration;
+
+/**
  * @brief 캘리브레이션 데이터 구조체
  * 사용자 개인화를 위한 캘리브레이션 정보
  */
 typedef struct {
-  float scale_factor;    /* 사용자/표준 크기 비율 */
+  float scale_factor;    /* 사용자/표준 크기 비율 (전체 스케일) */
   Point3D center_offset; /* 중심점 보정 오프셋 (z는 0으로 설정) */
   bool is_calibrated;    /* 캘리브레이션 완료 플래그 */
   float calibration_quality; /* 캘리브레이션 품질 점수 (0.0~1.0) */
+  JointLengthCalibration joint_lengths; /* 관절별 길이 켈리브레이션 */
 } CalibrationData;
 
 /**

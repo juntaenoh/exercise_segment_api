@@ -1,4 +1,13 @@
-# Exercise Segment Analysis API v2.0.0 - 프로젝트 요약
+# Exercise Segment Analysis API v2.1.0 - 프로젝트 요약
+
+## 🆕 v2.1.0 주요 변경사항
+
+### 향상된 성능과 사용성
+- **향상된 세그먼트 관리**: 전체 세그먼트 미리 로드로 분석 속도 향상
+- **사용자 위치 기준 분석**: `segment_analyze_smart()`로 사용자 위치에 맞춘 목표 포즈 반환
+- **효율적인 메모리 관리**: 세그먼트 캐싱 시스템으로 성능 최적화
+- **확장된 테스트 도구**: 다양한 체형과 상황을 테스트할 수 있는 프로그램들
+- **Swift 호환성 강화**: 더 안정적인 Swift 통합 지원
 
 ## 🆕 v2.0.0 주요 변경사항
 
@@ -11,7 +20,7 @@
 
 ## 개발 완료 현황 ✅
 
-### 1. 프로젝트 구조 ✅
+### 1. 프로젝트 구조 ✅ (v2.1.0 업데이트)
 ```
 exercise_segment_api/
 ├── include/          # 헤더 파일들
@@ -30,7 +39,14 @@ exercise_segment_api/
 │   ├── test_calibration.c  # 캘리브레이션 테스트
 │   └── test_pose_analysis.c # 포즈 분석 테스트
 ├── examples/         # 예제 파일들
-│   └── basic_example.c     # 기본 사용 예제
+│   ├── basic_example.c     # 기본 사용 예제
+│   ├── realtime_demo.c     # 실시간 데모
+│   └── smart_demo.c        # 🆕 스마트 분석 데모
+├── test_*.c          # 🆕 새로운 테스트 프로그램들
+│   ├── test_simple_feedback.c      # 간단한 피드백 테스트
+│   ├── test_joint_calibration.c    # 관절별 캘리브레이션 테스트
+│   ├── test_realtime_feedback.c    # 실시간 피드백 테스트
+│   └── test_foot_center.c          # 발 중심점 테스트
 ├── build/            # 빌드 결과물
 ├── CMakeLists.txt    # CMake 빌드 설정
 ├── README.md         # 프로젝트 설명서
@@ -73,6 +89,11 @@ exercise_segment_api/
 - ✅ 실시간 분석 엔진
 - ✅ 변환된 목표 포즈 반환
 - ✅ 세그먼트 리셋/해제
+- 🆕 **향상된 세그먼트 관리**:
+  - ✅ 전체 세그먼트 미리 로드 (`segment_load_all_segments`)
+  - ✅ 세그먼트 빠른 선택 (`segment_set_current_segment`)
+  - ✅ 스마트 분석 (`segment_analyze_smart`)
+  - ✅ 세그먼트 정보 조회 (`segment_get_segment_info`)
 
 #### 🎮 공통 기능
 - ✅ API 초기화/정리

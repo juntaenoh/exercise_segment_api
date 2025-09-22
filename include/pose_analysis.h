@@ -20,14 +20,15 @@ extern "C" {
  * @param pose2 두 번째 포즈
  * @return 유사도 (0.0~1.0)
  */
-float segment_calculate_similarity(const PoseData* pose1, const PoseData* pose2);
+float segment_calculate_similarity(const PoseData *pose1,
+                                   const PoseData *pose2);
 
 /**
  * @brief 포즈 데이터 유효성 검사
  * @param pose 검사할 포즈 데이터
  * @return true 유효, false 무효
  */
-bool segment_validate_pose(const PoseData* pose);
+bool segment_validate_pose(const PoseData *pose);
 
 /**
  * @brief 세그먼트 진행도 계산
@@ -38,11 +39,11 @@ bool segment_validate_pose(const PoseData* pose);
  * @param care_joint_count 관심 관절 개수
  * @return 진행도 (0.0~1.0)
  */
-float calculate_segment_progress(const PoseData* current_pose,
-                                const PoseData* start_pose,
-                                const PoseData* end_pose,
-                                const JointType* care_joints,
-                                int care_joint_count);
+float calculate_segment_progress(const PoseData *current_pose,
+                                 const PoseData *start_pose,
+                                 const PoseData *end_pose,
+                                 const JointType *care_joints,
+                                 int care_joint_count);
 
 /**
  * @brief 관절별 교정 벡터 계산
@@ -52,11 +53,11 @@ float calculate_segment_progress(const PoseData* current_pose,
  * @param care_joint_count 관심 관절 개수
  * @param corrections 교정 벡터를 저장할 배열
  */
-void calculate_correction_vectors(const PoseData* current_pose,
-                                 const PoseData* target_pose,
-                                 const JointType* care_joints,
-                                 int care_joint_count,
-                                 Point3D corrections[JOINT_COUNT]);
+void calculate_correction_vectors(const PoseData *current_pose,
+                                  const PoseData *target_pose,
+                                  const JointType *care_joints,
+                                  int care_joint_count,
+                                  Point3D corrections[JOINT_COUNT]);
 
 /**
  * @brief 세그먼트 완료 여부 판단
@@ -67,11 +68,10 @@ void calculate_correction_vectors(const PoseData* current_pose,
  * @param similarity_threshold 유사도 임계값
  * @return true 완료, false 미완료
  */
-bool is_segment_completed(const PoseData* current_pose,
-                         const PoseData* end_pose,
-                         const JointType* care_joints,
-                         int care_joint_count,
-                         float similarity_threshold);
+bool is_segment_completed(const PoseData *current_pose,
+                          const PoseData *end_pose,
+                          const JointType *care_joints, int care_joint_count,
+                          float similarity_threshold);
 
 /**
  * @brief 포즈 정규화 (중심점 맞춤)
@@ -79,9 +79,9 @@ bool is_segment_completed(const PoseData* current_pose,
  * @param reference_center 참조 중심점
  * @param normalized_pose 정규화된 포즈를 저장할 구조체
  */
-void normalize_pose_center(const PoseData* input_pose,
-                          const Point3D* reference_center,
-                          PoseData* normalized_pose);
+void normalize_pose_center(const PoseData *input_pose,
+                           const Point3D *reference_center,
+                           PoseData *normalized_pose);
 
 #ifdef __cplusplus
 }

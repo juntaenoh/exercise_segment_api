@@ -59,6 +59,21 @@ target_link_libraries(example_basic exercise_segment_static)
 add_executable(realtime_demo examples/realtime_demo.c)
 target_link_libraries(realtime_demo exercise_segment_static)
 
+add_executable(smart_demo examples/smart_demo.c)
+target_link_libraries(smart_demo exercise_segment_static)
+
+add_executable(test_foot_center test_foot_center.c)
+target_link_libraries(test_foot_center exercise_segment_static)
+
+add_executable(test_realtime_feedback test_realtime_feedback.c)
+target_link_libraries(test_realtime_feedback exercise_segment_static)
+
+add_executable(test_simple_feedback test_simple_feedback.c)
+target_link_libraries(test_simple_feedback exercise_segment_static)
+
+add_executable(test_joint_calibration test_joint_calibration.c)
+target_link_libraries(test_joint_calibration exercise_segment_static)
+
 # 테스트 실행 파일 생성 (옵션)
 option(BUILD_TESTS "Build test executables" OFF)
 if(BUILD_TESTS)

@@ -1,1 +1,0 @@
-/usr/bin/cc  -Wall -Wextra -O3 -march=armv8-a -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/test_math_utils.dir/tests/test_math_utils.c.o -o test_math_utils  libexercise_segment_static.a -lm

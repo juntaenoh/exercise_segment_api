@@ -1,7 +1,7 @@
 CMakeFiles/exercise_segment_static.dir/src/segment_core.c.o: \
   /Users/nojuntae/exercise_segment_api/src/segment_core.c \
-  /Users/nojuntae/exercise_segment_api/include/calibration.h \
-  /Users/nojuntae/exercise_segment_api/include/segment_types.h \
+  /Users/nojuntae/exercise_segment_api/src/../include/calibration.h \
+  /Users/nojuntae/exercise_segment_api/src/../include/segment_types.h \
   /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/16/include/stdbool.h \
   /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/16/include/stdint.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/stdint.h \
@@ -24,9 +24,11 @@ CMakeFiles/exercise_segment_static.dir/src/segment_core.c.o: \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_uintptr_t.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_types/_intmax_t.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_types/_uintmax_t.h \
-  /Users/nojuntae/exercise_segment_api/include/math_utils.h \
-  /Users/nojuntae/exercise_segment_api/include/pose_analysis.h \
-  /Users/nojuntae/exercise_segment_api/include/segment_api.h \
+  /Users/nojuntae/exercise_segment_api/src/../include/math_utils.h \
+  /Users/nojuntae/exercise_segment_api/src/../include/pose_analysis.h \
+  /Users/nojuntae/exercise_segment_api/src/../include/segment_api.h \
+  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/16/include/float.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/float.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/math.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/Availability.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/AvailabilityVersions.h \

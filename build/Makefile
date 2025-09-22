@@ -233,6 +233,71 @@ realtime_demo/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/realtime_demo.dir/build.make CMakeFiles/realtime_demo.dir/build
 .PHONY : realtime_demo/fast
 
+#=============================================================================
+# Target rules for targets named smart_demo
+
+# Build rule for target.
+smart_demo: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 smart_demo
+.PHONY : smart_demo
+
+# fast build rule for target.
+smart_demo/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/smart_demo.dir/build.make CMakeFiles/smart_demo.dir/build
+.PHONY : smart_demo/fast
+
+#=============================================================================
+# Target rules for targets named test_foot_center
+
+# Build rule for target.
+test_foot_center: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_foot_center
+.PHONY : test_foot_center
+
+# fast build rule for target.
+test_foot_center/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_foot_center.dir/build.make CMakeFiles/test_foot_center.dir/build
+.PHONY : test_foot_center/fast
+
+#=============================================================================
+# Target rules for targets named test_realtime_feedback
+
+# Build rule for target.
+test_realtime_feedback: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_realtime_feedback
+.PHONY : test_realtime_feedback
+
+# fast build rule for target.
+test_realtime_feedback/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_realtime_feedback.dir/build.make CMakeFiles/test_realtime_feedback.dir/build
+.PHONY : test_realtime_feedback/fast
+
+#=============================================================================
+# Target rules for targets named test_simple_feedback
+
+# Build rule for target.
+test_simple_feedback: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_simple_feedback
+.PHONY : test_simple_feedback
+
+# fast build rule for target.
+test_simple_feedback/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_simple_feedback.dir/build.make CMakeFiles/test_simple_feedback.dir/build
+.PHONY : test_simple_feedback/fast
+
+#=============================================================================
+# Target rules for targets named test_joint_calibration
+
+# Build rule for target.
+test_joint_calibration: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_joint_calibration
+.PHONY : test_joint_calibration
+
+# fast build rule for target.
+test_joint_calibration/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_joint_calibration.dir/build.make CMakeFiles/test_joint_calibration.dir/build
+.PHONY : test_joint_calibration/fast
+
 examples/basic_example.o: examples/basic_example.c.o
 .PHONY : examples/basic_example.o
 
@@ -280,6 +345,30 @@ examples/realtime_demo.s: examples/realtime_demo.c.s
 examples/realtime_demo.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/realtime_demo.dir/build.make CMakeFiles/realtime_demo.dir/examples/realtime_demo.c.s
 .PHONY : examples/realtime_demo.c.s
+
+examples/smart_demo.o: examples/smart_demo.c.o
+.PHONY : examples/smart_demo.o
+
+# target to build an object file
+examples/smart_demo.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/smart_demo.dir/build.make CMakeFiles/smart_demo.dir/examples/smart_demo.c.o
+.PHONY : examples/smart_demo.c.o
+
+examples/smart_demo.i: examples/smart_demo.c.i
+.PHONY : examples/smart_demo.i
+
+# target to preprocess a source file
+examples/smart_demo.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/smart_demo.dir/build.make CMakeFiles/smart_demo.dir/examples/smart_demo.c.i
+.PHONY : examples/smart_demo.c.i
+
+examples/smart_demo.s: examples/smart_demo.c.s
+.PHONY : examples/smart_demo.s
+
+# target to generate assembly for a file
+examples/smart_demo.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/smart_demo.dir/build.make CMakeFiles/smart_demo.dir/examples/smart_demo.c.s
+.PHONY : examples/smart_demo.c.s
 
 src/calibration.o: src/calibration.c.o
 .PHONY : src/calibration.o
@@ -389,6 +478,102 @@ src/segment_core.c.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/exercise_segment.dir/build.make CMakeFiles/exercise_segment.dir/src/segment_core.c.s
 .PHONY : src/segment_core.c.s
 
+test_foot_center.o: test_foot_center.c.o
+.PHONY : test_foot_center.o
+
+# target to build an object file
+test_foot_center.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_foot_center.dir/build.make CMakeFiles/test_foot_center.dir/test_foot_center.c.o
+.PHONY : test_foot_center.c.o
+
+test_foot_center.i: test_foot_center.c.i
+.PHONY : test_foot_center.i
+
+# target to preprocess a source file
+test_foot_center.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_foot_center.dir/build.make CMakeFiles/test_foot_center.dir/test_foot_center.c.i
+.PHONY : test_foot_center.c.i
+
+test_foot_center.s: test_foot_center.c.s
+.PHONY : test_foot_center.s
+
+# target to generate assembly for a file
+test_foot_center.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_foot_center.dir/build.make CMakeFiles/test_foot_center.dir/test_foot_center.c.s
+.PHONY : test_foot_center.c.s
+
+test_joint_calibration.o: test_joint_calibration.c.o
+.PHONY : test_joint_calibration.o
+
+# target to build an object file
+test_joint_calibration.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_joint_calibration.dir/build.make CMakeFiles/test_joint_calibration.dir/test_joint_calibration.c.o
+.PHONY : test_joint_calibration.c.o
+
+test_joint_calibration.i: test_joint_calibration.c.i
+.PHONY : test_joint_calibration.i
+
+# target to preprocess a source file
+test_joint_calibration.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_joint_calibration.dir/build.make CMakeFiles/test_joint_calibration.dir/test_joint_calibration.c.i
+.PHONY : test_joint_calibration.c.i
+
+test_joint_calibration.s: test_joint_calibration.c.s
+.PHONY : test_joint_calibration.s
+
+# target to generate assembly for a file
+test_joint_calibration.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_joint_calibration.dir/build.make CMakeFiles/test_joint_calibration.dir/test_joint_calibration.c.s
+.PHONY : test_joint_calibration.c.s
+
+test_realtime_feedback.o: test_realtime_feedback.c.o
+.PHONY : test_realtime_feedback.o
+
+# target to build an object file
+test_realtime_feedback.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_realtime_feedback.dir/build.make CMakeFiles/test_realtime_feedback.dir/test_realtime_feedback.c.o
+.PHONY : test_realtime_feedback.c.o
+
+test_realtime_feedback.i: test_realtime_feedback.c.i
+.PHONY : test_realtime_feedback.i
+
+# target to preprocess a source file
+test_realtime_feedback.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_realtime_feedback.dir/build.make CMakeFiles/test_realtime_feedback.dir/test_realtime_feedback.c.i
+.PHONY : test_realtime_feedback.c.i
+
+test_realtime_feedback.s: test_realtime_feedback.c.s
+.PHONY : test_realtime_feedback.s
+
+# target to generate assembly for a file
+test_realtime_feedback.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_realtime_feedback.dir/build.make CMakeFiles/test_realtime_feedback.dir/test_realtime_feedback.c.s
+.PHONY : test_realtime_feedback.c.s
+
+test_simple_feedback.o: test_simple_feedback.c.o
+.PHONY : test_simple_feedback.o
+
+# target to build an object file
+test_simple_feedback.c.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_simple_feedback.dir/build.make CMakeFiles/test_simple_feedback.dir/test_simple_feedback.c.o
+.PHONY : test_simple_feedback.c.o
+
+test_simple_feedback.i: test_simple_feedback.c.i
+.PHONY : test_simple_feedback.i
+
+# target to preprocess a source file
+test_simple_feedback.c.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_simple_feedback.dir/build.make CMakeFiles/test_simple_feedback.dir/test_simple_feedback.c.i
+.PHONY : test_simple_feedback.c.i
+
+test_simple_feedback.s: test_simple_feedback.c.s
+.PHONY : test_simple_feedback.s
+
+# target to generate assembly for a file
+test_simple_feedback.c.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/test_simple_feedback.dir/build.make CMakeFiles/test_simple_feedback.dir/test_simple_feedback.c.s
+.PHONY : test_simple_feedback.c.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -407,12 +592,20 @@ help:
 	@echo "... exercise_segment"
 	@echo "... exercise_segment_static"
 	@echo "... realtime_demo"
+	@echo "... smart_demo"
+	@echo "... test_foot_center"
+	@echo "... test_joint_calibration"
+	@echo "... test_realtime_feedback"
+	@echo "... test_simple_feedback"
 	@echo "... examples/basic_example.o"
 	@echo "... examples/basic_example.i"
 	@echo "... examples/basic_example.s"
 	@echo "... examples/realtime_demo.o"
 	@echo "... examples/realtime_demo.i"
 	@echo "... examples/realtime_demo.s"
+	@echo "... examples/smart_demo.o"
+	@echo "... examples/smart_demo.i"
+	@echo "... examples/smart_demo.s"
 	@echo "... src/calibration.o"
 	@echo "... src/calibration.i"
 	@echo "... src/calibration.s"
@@ -425,6 +618,18 @@ help:
 	@echo "... src/segment_core.o"
 	@echo "... src/segment_core.i"
 	@echo "... src/segment_core.s"
+	@echo "... test_foot_center.o"
+	@echo "... test_foot_center.i"
+	@echo "... test_foot_center.s"
+	@echo "... test_joint_calibration.o"
+	@echo "... test_joint_calibration.i"
+	@echo "... test_joint_calibration.s"
+	@echo "... test_realtime_feedback.o"
+	@echo "... test_realtime_feedback.i"
+	@echo "... test_realtime_feedback.s"
+	@echo "... test_simple_feedback.o"
+	@echo "... test_simple_feedback.i"
+	@echo "... test_simple_feedback.s"
 .PHONY : help
 
 

@@ -5,10 +5,12 @@
  * @version 1.0.0
  */
 
-#include "calibration.h"
-#include "math_utils.h"
-#include "pose_analysis.h"
-#include "segment_api.h"
+#include "../include/calibration.h"
+#include "../include/math_utils.h"
+#include "../include/pose_analysis.h"
+#include "../include/segment_api.h"
+#include "../include/segment_types.h"
+#include <float.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +22,7 @@ static bool g_initialized = false;
 static bool g_segment_loaded = false;
 
 // API 내부 이상적 표준 포즈들
-static PoseData g_ideal_base_pose;  // 이상적 기본 포즈
+PoseData g_ideal_base_pose; // 이상적 기본 포즈 (extern으로 접근 가능)
 static PoseData g_ideal_poses[100]; // 이상적 포즈 데이터베이스
 static int g_ideal_pose_count = 0;
 
@@ -29,10 +31,17 @@ CalibrationData g_recorder_calibration; // A의 체형 데이터
 bool g_recorder_calibrated = false;
 
 // B 이용자용 (사용자)
-static CalibrationData g_user_calibration; // B의 체형 데이터
-static bool g_user_calibrated = false;
+CalibrationData g_user_calibration; // B의 체형 데이터 (extern으로 접근 가능)
+bool g_user_calibrated = false;       // extern으로 접근 가능
 static PoseData g_user_segment_start; // B용 변환된 시작 포즈
 static PoseData g_user_segment_end;   // B용 변환된 종료 포즈
+
+// 향상된 세그먼트 관리를 위한 전역 변수들 (v2.1.0)
+static PoseData *g_user_segments = NULL; // 모든 세그먼트를 캐시하는 배열
+static int g_total_segment_count = 0;      // 로드된 총 세그먼트 개수
+static bool g_all_segments_loaded = false; // 전체 세그먼트 로드 여부
+static int g_current_start_index = -1; // 현재 사용 중인 시작 인덱스
+static int g_current_end_index = -1;   // 현재 사용 중인 종료 인덱스
 
 // 에러 메시지 배열
 static const char *error_messages[] = {"Success",
@@ -131,6 +140,8 @@ static int finalize_json_workout(const char *workout_name,
 static int load_poses_from_json(const char *json_file_path, int start_index,
                                 int end_index, PoseData *start_pose,
                                 PoseData *end_pose);
+static int parse_pose_from_json_string(const char *json_str, size_t json_len,
+                                       PoseData *pose);
 
 // JSON 파일 처리 구현
 static int save_pose_to_json(const PoseData *pose, const char *pose_name,
@@ -201,21 +212,31 @@ static int finalize_json_workout(const char *workout_name,
   fprintf(final_file, "  \"version\": \"2.0.0\",\n");
   fprintf(final_file, "  \"poses\": [\n");
 
-  // 임시 파일 내용 복사 (마지막 쉼표 제거)
-  char line[1024];
-  bool first_pose = true;
-  while (fgets(line, sizeof(line), temp_file)) {
-    if (strstr(line, "},")) {
-      // 마지막 쉼표 제거
-      char *comma = strrchr(line, ',');
-      if (comma) {
-        *comma = '\0';
-      }
-      fprintf(final_file, "%s\n", line);
-    } else {
-      fprintf(final_file, "%s", line);
+  // 임시 파일 내용을 모두 읽어서 마지막 쉼표만 제거
+  fseek(temp_file, 0, SEEK_END);
+  long file_size = ftell(temp_file);
+  fseek(temp_file, 0, SEEK_SET);
+
+  char *temp_content = malloc(file_size + 1);
+  if (!temp_content) {
+    fclose(temp_file);
+    fclose(final_file);
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  fread(temp_content, 1, file_size, temp_file);
+  temp_content[file_size] = '\0';
+
+  // 마지막 쉼표 제거 (뒤에서부터 찾아서 제거)
+  for (long i = file_size - 1; i >= 0; i--) {
+    if (temp_content[i] == ',') {
+      temp_content[i] = '\0';
+      break;
     }
   }
+
+  fprintf(final_file, "%s", temp_content);
+  free(temp_content);
 
   // JSON 푸터 작성
   fprintf(final_file, "  ]\n");
@@ -234,53 +255,252 @@ static int load_poses_from_json(const char *json_file_path, int start_index,
                                 int end_index, PoseData *start_pose,
                                 PoseData *end_pose) {
   if (!json_file_path || !start_pose || !end_pose) {
+    printf("❌ JSON 로드 실패: NULL 포인터 (file: %p, start: %p, end: %p)\n",
+           json_file_path, start_pose, end_pose);
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
 
   if (start_index < 0 || end_index < 0 || start_index >= end_index) {
+    printf("❌ JSON 로드 실패: 잘못된 인덱스 (start: %d, end: %d)\n",
+           start_index, end_index);
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
 
+  printf("🔍 JSON 파일 로드 시작: %s (인덱스 %d → %d)\n", json_file_path,
+         start_index, end_index);
+
   FILE *file = fopen(json_file_path, "r");
   if (!file) {
+    printf("❌ JSON 파일 열기 실패: %s\n", json_file_path);
     return SEGMENT_ERROR_MEMORY_ALLOCATION;
   }
 
-  // 간단한 JSON 파싱 (실제로는 더 정교한 파서가 필요)
-  char line[1024];
-  int current_pose_index = -1;
-  bool in_poses_array = false;
+  // 개선된 JSON 파싱 - 파일 크기에 맞춰 동적 할당
+  fseek(file, 0, SEEK_END);
+  long file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  char *buffer = malloc(file_size + 1);
+  if (!buffer) {
+    fclose(file);
+    printf("❌ JSON 파일용 메모리 할당 실패\n");
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  size_t bytes_read = fread(buffer, 1, file_size, file);
+  buffer[bytes_read] = '\0';
+  fclose(file);
+
+  if (bytes_read == 0) {
+    printf("❌ JSON 파일이 비어있음: %s\n", json_file_path);
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ JSON 파일 읽기 성공: %zu 바이트\n", bytes_read);
+
+  // JSON 구조 파싱
+  char *poses_start = strstr(buffer, "\"poses\"");
+  if (!poses_start) {
+    printf("❌ JSON에서 'poses' 배열을 찾을 수 없음\n");
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  // poses 배열 시작점 찾기
+  char *array_start = strchr(poses_start, '[');
+  if (!array_start) {
+    printf("❌ JSON에서 'poses' 배열 시작점 '[' 를 찾을 수 없음\n");
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ 'poses' 배열 찾음, 파싱 시작\n");
+
+  // 포즈 객체들을 순차적으로 파싱
+  char *current_pos = array_start + 1;
+  int current_pose_index = 0;
   bool found_start = false;
   bool found_end = false;
 
-  while (fgets(line, sizeof(line), file) && (!found_start || !found_end)) {
-    if (strstr(line, "\"poses\"")) {
-      in_poses_array = true;
-      continue;
+  while (*current_pos && (!found_start || !found_end)) {
+    // 다음 포즈 객체 시작점 찾기
+    char *pose_start = strchr(current_pos, '{');
+    if (!pose_start)
+      break;
+
+    // 포즈 객체 끝점 찾기 (중첩된 객체 고려)
+    char *pose_end = pose_start + 1;
+    int brace_count = 1;
+    while (*pose_end && brace_count > 0) {
+      if (*pose_end == '{')
+        brace_count++;
+      else if (*pose_end == '}')
+        brace_count--;
+      pose_end++;
     }
 
-    if (in_poses_array && strstr(line, "{")) {
-      current_pose_index++;
+    if (brace_count != 0)
+      break; // 불완전한 JSON
 
-      if (current_pose_index == start_index) {
-        // 시작 포즈 파싱 (간단한 구현)
-        memset(start_pose, 0, sizeof(PoseData));
-        start_pose->timestamp = 1000;
+    // 현재 포즈가 원하는 인덱스인지 확인
+    if (current_pose_index == start_index) {
+      // 시작 포즈 파싱
+      memset(start_pose, 0, sizeof(PoseData));
+      if (parse_pose_from_json_string(pose_start, pose_end - pose_start,
+                                      start_pose) == SEGMENT_OK) {
         found_start = true;
       }
+    }
 
-      if (current_pose_index == end_index) {
-        // 종료 포즈 파싱 (간단한 구현)
-        memset(end_pose, 0, sizeof(PoseData));
-        end_pose->timestamp = 1000;
+    if (current_pose_index == end_index) {
+      // 종료 포즈 파싱
+      memset(end_pose, 0, sizeof(PoseData));
+      if (parse_pose_from_json_string(pose_start, pose_end - pose_start,
+                                      end_pose) == SEGMENT_OK) {
         found_end = true;
       }
     }
+
+    current_pose_index++;
+    current_pos = pose_end;
+
+    // 다음 객체로 이동
+    while (*current_pos && (*current_pos == ',' || *current_pos == ' ' ||
+                            *current_pos == '\n' || *current_pos == '\t')) {
+      current_pos++;
+    }
   }
 
-  fclose(file);
-
   if (!found_start || !found_end) {
+    printf("❌ 요청한 포즈를 찾지 못함 (found_start: %s, found_end: %s, 총 "
+           "포즈 수: %d)\n",
+           found_start ? "예" : "아니오", found_end ? "예" : "아니오",
+           current_pose_index);
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ JSON 파싱 성공: 시작 포즈(%d), 종료 포즈(%d) 로드 완료\n",
+         start_index, end_index);
+  free(buffer);
+  return SEGMENT_OK;
+}
+
+static int parse_pose_from_json_string(const char *json_str, size_t json_len,
+                                       PoseData *pose) {
+  if (!json_str || !pose || json_len == 0) {
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  // JSON 문자열을 복사하여 null 종료 문자열로 만들기
+  char *json_copy = malloc(json_len + 1);
+  if (!json_copy) {
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+  strncpy(json_copy, json_str, json_len);
+  json_copy[json_len] = '\0';
+
+  // 기본값으로 초기화
+  memset(pose, 0, sizeof(PoseData));
+  pose->timestamp = 1000; // 기본 타임스탬프
+
+  // timestamp 파싱
+  char *timestamp_str = strstr(json_copy, "\"timestamp\"");
+  if (timestamp_str) {
+    char *colon = strchr(timestamp_str, ':');
+    if (colon) {
+      pose->timestamp = strtoull(colon + 1, NULL, 10);
+    }
+  }
+
+  // landmarks 배열 파싱
+  char *landmarks_start = strstr(json_copy, "\"landmarks\"");
+  if (!landmarks_start) {
+    free(json_copy);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  char *array_start = strchr(landmarks_start, '[');
+  if (!array_start) {
+    free(json_copy);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  // 각 랜드마크 파싱
+  char *current_pos = array_start + 1;
+  int landmark_index = 0;
+
+  while (*current_pos && landmark_index < POSE_LANDMARK_COUNT) {
+    // 다음 랜드마크 객체 찾기
+    char *landmark_start = strchr(current_pos, '{');
+    if (!landmark_start)
+      break;
+
+    // 랜드마크 객체 끝점 찾기
+    char *landmark_end = landmark_start + 1;
+    int brace_count = 1;
+    while (*landmark_end && brace_count > 0) {
+      if (*landmark_end == '{')
+        brace_count++;
+      else if (*landmark_end == '}')
+        brace_count--;
+      landmark_end++;
+    }
+
+    if (brace_count != 0)
+      break;
+
+    // 랜드마크 데이터 파싱
+    char *x_str = strstr(landmark_start, "\"x\"");
+    char *y_str = strstr(landmark_start, "\"y\"");
+    char *z_str = strstr(landmark_start, "\"z\"");
+    char *conf_str = strstr(landmark_start, "\"confidence\"");
+
+    if (x_str && y_str && z_str && conf_str && x_str < landmark_end &&
+        y_str < landmark_end && z_str < landmark_end &&
+        conf_str < landmark_end) {
+
+      // x 좌표 파싱
+      char *x_colon = strchr(x_str, ':');
+      if (x_colon) {
+        pose->landmarks[landmark_index].position.x = strtof(x_colon + 1, NULL);
+      }
+
+      // y 좌표 파싱
+      char *y_colon = strchr(y_str, ':');
+      if (y_colon) {
+        pose->landmarks[landmark_index].position.y = strtof(y_colon + 1, NULL);
+      }
+
+      // z 좌표 파싱
+      char *z_colon = strchr(z_str, ':');
+      if (z_colon) {
+        pose->landmarks[landmark_index].position.z = strtof(z_colon + 1, NULL);
+      }
+
+      // confidence 파싱
+      char *conf_colon = strchr(conf_str, ':');
+      if (conf_colon) {
+        pose->landmarks[landmark_index].inFrameLikelihood =
+            strtof(conf_colon + 1, NULL);
+      }
+    }
+
+    landmark_index++;
+    current_pos = landmark_end;
+
+    // 다음 객체로 이동
+    while (*current_pos && (*current_pos == ',' || *current_pos == ' ' ||
+                            *current_pos == '\n' || *current_pos == '\t')) {
+      current_pos++;
+    }
+  }
+
+  free(json_copy);
+
+  // 파싱된 랜드마크 수가 충분한지 확인
+  if (landmark_index < POSE_LANDMARK_COUNT / 2) {
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
 
@@ -397,6 +617,14 @@ int segment_calibrate_recorder(const PoseData *base_pose) {
   g_recorder_calibration.is_calibrated = true;
   g_recorder_calibration.calibration_quality = 0.95f; // 높은 품질 점수
 
+  // 관절별 길이 켈리브레이션 수행
+  printf("\n🔧 관절별 길이 켈리브레이션 시작...\n");
+  int joint_result =
+      segment_calibrate_joint_lengths(base_pose, &g_recorder_calibration);
+  if (joint_result != SEGMENT_OK) {
+    printf("⚠️  관절별 길이 켈리브레이션 실패, 기본 켈리브레이션만 적용\n");
+  }
+
   printf("✅ 캘리브레이션 성공! 품질: %.2f\n",
          g_recorder_calibration.calibration_quality);
   printf("   - 어깨 너비: %.2f\n", user_shoulder_width);
@@ -404,6 +632,9 @@ int segment_calibrate_recorder(const PoseData *base_pose) {
   printf("   - 중심 오프셋: (%.2f, %.2f)\n",
          g_recorder_calibration.center_offset.x,
          g_recorder_calibration.center_offset.y);
+
+  // 관절별 길이 정보 출력
+  print_joint_lengths(&g_recorder_calibration);
 
   g_recorder_calibrated = true;
 
@@ -464,8 +695,15 @@ int segment_finalize_workout_json(const char *workout_name,
 
 // segment_calibrate_user는 calibration.c에서 구현됨
 
+// DEPRECATED: 이 함수는 v2.1.0에서 비효율적으로 판단되어 더 이상 권장되지
+// 않습니다. 대신 segment_load_all_segments() + segment_set_current_segment()
+// 조합을 사용하세요.
 int segment_load_segment(const char *json_file_path, int start_index,
                          int end_index) {
+  printf(
+      "⚠️ DEPRECATED: segment_load_segment() 대신 segment_load_all_segments() + "
+      "segment_set_current_segment() 사용을 권장합니다.\n");
+
   if (!g_initialized) {
     return SEGMENT_ERROR_NOT_INITIALIZED;
   }
@@ -503,7 +741,12 @@ int segment_load_segment(const char *json_file_path, int start_index,
   return SEGMENT_OK;
 }
 
+// DEPRECATED: 이 함수는 v2.1.0에서 목표 포즈 정보를 제공하지 않아 더 이상
+// 권장되지 않습니다. 대신 segment_analyze_with_target_pose() 사용을 권장합니다.
 SegmentOutput segment_analyze(const PoseData *current_pose) {
+  printf("⚠️ DEPRECATED: segment_analyze() 대신 "
+         "segment_analyze_with_target_pose() 사용을 권장합니다.\n");
+
   SegmentOutput result = {0};
 
   if (!g_initialized || !g_segment_loaded || !current_pose) {
@@ -613,6 +856,16 @@ void segment_api_cleanup(void) {
 
   // 세그먼트 해제
   segment_destroy();
+
+  // 향상된 세그먼트 관리 메모리 해제 (v2.1.0)
+  if (g_user_segments) {
+    free(g_user_segments);
+    g_user_segments = NULL;
+  }
+  g_total_segment_count = 0;
+  g_all_segments_loaded = false;
+  g_current_start_index = -1;
+  g_current_end_index = -1;
 
   g_initialized = false;
 }
@@ -748,4 +1001,540 @@ PoseLandmark get_pose_landmark(PoseData *pose, int index) {
   PoseLandmark default_landmark = {.position = {0.0f, 0.0f, 0.0f},
                                    .inFrameLikelihood = 0.0f};
   return default_landmark;
+}
+
+// MARK: - 향상된 세그먼트 관리 API 구현 (v2.1.0)
+
+/**
+ * @brief JSON 파일에서 모든 포즈를 한 번에 로드하는 내부 함수
+ */
+static int load_all_poses_from_json(const char *json_file_path,
+                                    PoseData **out_poses, int *out_pose_count) {
+  if (!json_file_path || !out_poses || !out_pose_count) {
+    printf("❌ 전체 JSON 로드 실패: NULL 포인터\n");
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("🔍 전체 JSON 파일 로드 시작: %s\n", json_file_path);
+
+  FILE *file = fopen(json_file_path, "r");
+  if (!file) {
+    printf("❌ JSON 파일 열기 실패: %s\n", json_file_path);
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  // 파일 크기 확인
+  fseek(file, 0, SEEK_END);
+  long file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  char *buffer = malloc(file_size + 1);
+  if (!buffer) {
+    fclose(file);
+    printf("❌ JSON 파일용 메모리 할당 실패\n");
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  size_t bytes_read = fread(buffer, 1, file_size, file);
+  buffer[bytes_read] = '\0';
+  fclose(file);
+
+  if (bytes_read == 0) {
+    printf("❌ JSON 파일이 비어있음: %s\n", json_file_path);
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ JSON 파일 읽기 성공: %zu 바이트\n", bytes_read);
+
+  // poses 배열 찾기
+  char *poses_start = strstr(buffer, "\"poses\"");
+  if (!poses_start) {
+    printf("❌ JSON에서 'poses' 배열을 찾을 수 없음\n");
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  char *array_start = strchr(poses_start, '[');
+  if (!array_start) {
+    printf("❌ JSON에서 'poses' 배열 시작점 '[' 를 찾을 수 없음\n");
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ 'poses' 배열 찾음, 전체 파싱 시작\n");
+
+  // 먼저 포즈 개수 계산
+  char *temp_pos = array_start + 1;
+  int pose_count = 0;
+  while (*temp_pos) {
+    char *pose_start = strchr(temp_pos, '{');
+    if (!pose_start)
+      break;
+
+    // 포즈 객체 끝점 찾기
+    char *pose_end = pose_start + 1;
+    int brace_count = 1;
+    while (*pose_end && brace_count > 0) {
+      if (*pose_end == '{')
+        brace_count++;
+      else if (*pose_end == '}')
+        brace_count--;
+      pose_end++;
+    }
+
+    if (brace_count != 0)
+      break;
+
+    pose_count++;
+    temp_pos = pose_end;
+
+    // 다음 객체로 이동
+    while (*temp_pos && (*temp_pos == ',' || *temp_pos == ' ' ||
+                         *temp_pos == '\n' || *temp_pos == '\t')) {
+      temp_pos++;
+    }
+  }
+
+  if (pose_count == 0) {
+    printf("❌ JSON에서 유효한 포즈를 찾을 수 없음\n");
+    free(buffer);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ 총 %d개의 포즈 발견, 메모리 할당 중...\n", pose_count);
+
+  // 포즈 배열 메모리 할당
+  PoseData *poses = malloc(pose_count * sizeof(PoseData));
+  if (!poses) {
+    printf("❌ 포즈 배열 메모리 할당 실패\n");
+    free(buffer);
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  // 실제 포즈 파싱
+  char *current_pos = array_start + 1;
+  int parsed_count = 0;
+
+  while (*current_pos && parsed_count < pose_count) {
+    char *pose_start = strchr(current_pos, '{');
+    if (!pose_start)
+      break;
+
+    char *pose_end = pose_start + 1;
+    int brace_count = 1;
+    while (*pose_end && brace_count > 0) {
+      if (*pose_end == '{')
+        brace_count++;
+      else if (*pose_end == '}')
+        brace_count--;
+      pose_end++;
+    }
+
+    if (brace_count != 0)
+      break;
+
+    // 포즈 파싱
+    memset(&poses[parsed_count], 0, sizeof(PoseData));
+    if (parse_pose_from_json_string(pose_start, pose_end - pose_start,
+                                    &poses[parsed_count]) == SEGMENT_OK) {
+      parsed_count++;
+    } else {
+      printf("⚠️ 포즈 %d 파싱 실패, 건너뜀\n", parsed_count);
+    }
+
+    current_pos = pose_end;
+    while (*current_pos && (*current_pos == ',' || *current_pos == ' ' ||
+                            *current_pos == '\n' || *current_pos == '\t')) {
+      current_pos++;
+    }
+  }
+
+  free(buffer);
+
+  if (parsed_count == 0) {
+    printf("❌ 파싱된 포즈가 없음\n");
+    free(poses);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("✅ 전체 JSON 파싱 완료: %d개 포즈 로드 성공\n", parsed_count);
+
+  *out_poses = poses;
+  *out_pose_count = parsed_count;
+  return SEGMENT_OK;
+}
+
+int segment_load_all_segments(const char *json_file_path) {
+  if (!g_initialized) {
+    printf("❌ API 초기화 안됨\n");
+    return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
+
+  if (!g_user_calibrated) {
+    printf("❌ 사용자 캘리브레이션 안됨\n");
+    return SEGMENT_ERROR_CALIBRATION_FAILED;
+  }
+
+  if (!json_file_path) {
+    printf("❌ JSON 파일 경로가 NULL\n");
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("🚀 전체 세그먼트 로드 시작: %s\n", json_file_path);
+
+  // 기존에 로드된 세그먼트가 있다면 해제
+  if (g_user_segments) {
+    free(g_user_segments);
+    g_user_segments = NULL;
+  }
+  g_total_segment_count = 0;
+  g_all_segments_loaded = false;
+
+  // JSON에서 모든 포즈 로드
+  PoseData *ideal_poses = NULL;
+  int pose_count = 0;
+  int result =
+      load_all_poses_from_json(json_file_path, &ideal_poses, &pose_count);
+  if (result != SEGMENT_OK) {
+    printf("❌ JSON에서 포즈 로드 실패: 에러 코드 %d\n", result);
+    return result;
+  }
+
+  // 사용자 체형에 맞게 변환된 포즈 배열 생성
+  g_user_segments = malloc(pose_count * sizeof(PoseData));
+  if (!g_user_segments) {
+    printf("❌ 사용자 세그먼트 배열 메모리 할당 실패\n");
+    free(ideal_poses);
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  // 각 포즈를 사용자 체형에 맞게 변환
+  printf("🔄 %d개 포즈를 사용자 체형에 맞게 변환 중...\n", pose_count);
+  for (int i = 0; i < pose_count; i++) {
+    result = apply_calibration_to_pose(&ideal_poses[i], &g_user_calibration,
+                                       &g_user_segments[i]);
+    if (result != SEGMENT_OK) {
+      printf("❌ 포즈 %d 변환 실패: 에러 코드 %d\n", i, result);
+      free(ideal_poses);
+      free(g_user_segments);
+      g_user_segments = NULL;
+      return result;
+    }
+  }
+
+  free(ideal_poses);
+
+  g_total_segment_count = pose_count;
+  g_all_segments_loaded = true;
+  g_current_start_index = -1;
+  g_current_end_index = -1;
+
+  printf("✅ 전체 세그먼트 로드 완료: %d개 포즈가 사용자 체형에 맞게 변환됨\n",
+         pose_count);
+  return SEGMENT_OK;
+}
+
+int segment_set_current_segment(int start_index, int end_index) {
+  if (!g_initialized) {
+    printf("❌ API 초기화 안됨\n");
+    return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
+
+  if (!g_all_segments_loaded) {
+    printf("❌ 전체 세그먼트가 로드되지 않음. segment_load_all_segments() 먼저 "
+           "호출하세요\n");
+    return SEGMENT_ERROR_SEGMENT_NOT_CREATED;
+  }
+
+  if (start_index < 0 || end_index < 0 ||
+      start_index >= g_total_segment_count ||
+      end_index >= g_total_segment_count ||
+      start_index > end_index) { // 같은 인덱스 허용
+    printf("❌ 잘못된 세그먼트 인덱스: start=%d, end=%d (총 %d개 포즈)\n",
+           start_index, end_index, g_total_segment_count);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  // 현재 세그먼트 설정
+  g_user_segment_start = g_user_segments[start_index];
+  g_user_segment_end = g_user_segments[end_index];
+  g_current_start_index = start_index;
+  g_current_end_index = end_index;
+  g_segment_loaded = true;
+
+  printf("✅ 세그먼트 선택 완료: %d → %d\n", start_index, end_index);
+  return SEGMENT_OK;
+}
+
+int segment_analyze_with_target_pose(const PoseData *current_pose,
+                                     float *out_progress, float *out_similarity,
+                                     bool *out_is_complete,
+                                     Point3D *out_corrections,
+                                     PoseData *out_target_pose) {
+  // 기본 분석 수행
+  int result =
+      segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                             out_similarity, out_corrections);
+  if (result != SEGMENT_OK) {
+    return result;
+  }
+
+  // 목표 포즈 반환
+  if (out_target_pose) {
+    result = segment_get_transformed_end_pose(out_target_pose);
+    if (result != SEGMENT_OK) {
+      printf("❌ 목표 포즈 가져오기 실패: 에러 코드 %d\n", result);
+      return result;
+    }
+  }
+
+  return SEGMENT_OK;
+}
+
+int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
+                          float *out_similarity, bool *out_is_complete,
+                          Point3D *out_corrections,
+                          PoseData *out_smart_target_pose) {
+
+  if (!current_pose || !out_progress || !out_similarity || !out_is_complete ||
+      !out_corrections || !out_smart_target_pose) {
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  if (!g_initialized || !g_segment_loaded) {
+    return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
+
+  // 1. 원본 시작 포즈와 종료 포즈 가져오기
+  PoseData raw_start_pose = g_user_segment_start;
+  PoseData raw_end_pose = g_user_segment_end;
+
+  // 3. 현재 포즈의 크기 측정 (어깨 너비 기준)
+  PoseLandmark current_left_shoulder =
+      current_pose->landmarks[POSE_LANDMARK_LEFT_SHOULDER];
+  PoseLandmark current_right_shoulder =
+      current_pose->landmarks[POSE_LANDMARK_RIGHT_SHOULDER];
+
+  float current_shoulder_width = 0;
+  if (current_left_shoulder.inFrameLikelihood >= 0.5f &&
+      current_right_shoulder.inFrameLikelihood >= 0.5f) {
+    float dx =
+        current_left_shoulder.position.x - current_right_shoulder.position.x;
+    float dy =
+        current_left_shoulder.position.y - current_right_shoulder.position.y;
+    current_shoulder_width = sqrtf(dx * dx + dy * dy);
+  } else {
+    *out_smart_target_pose = raw_end_pose;
+    // 스마트 목표 포즈가 원본과 같다면 원본과 비교해서 분석
+    return segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                                  out_similarity, out_corrections);
+  }
+
+  // 4. 종료 포즈의 크기 측정 (어깨 너비 기준)
+  PoseLandmark target_left_shoulder =
+      raw_end_pose.landmarks[POSE_LANDMARK_LEFT_SHOULDER];
+  PoseLandmark target_right_shoulder =
+      raw_end_pose.landmarks[POSE_LANDMARK_RIGHT_SHOULDER];
+
+  float target_shoulder_width = 0;
+  if (target_left_shoulder.inFrameLikelihood >= 0.5f &&
+      target_right_shoulder.inFrameLikelihood >= 0.5f) {
+    float dx =
+        target_left_shoulder.position.x - target_right_shoulder.position.x;
+    float dy =
+        target_left_shoulder.position.y - target_right_shoulder.position.y;
+    target_shoulder_width = sqrtf(dx * dx + dy * dy);
+  } else {
+    *out_smart_target_pose = raw_end_pose;
+    // 스마트 목표 포즈가 원본과 같다면 원본과 비교해서 분석
+    return segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                                  out_similarity, out_corrections);
+  }
+
+  // 5. 크기 조정을 위한 스케일 계산
+  float scale = (target_shoulder_width > 0)
+                    ? current_shoulder_width / target_shoulder_width
+                    : 1.0f;
+
+  // 6. 현재 사용자의 발 중심점 계산
+  PoseLandmark current_left_ankle =
+      current_pose->landmarks[POSE_LANDMARK_LEFT_ANKLE];
+  PoseLandmark current_right_ankle =
+      current_pose->landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+
+  Point3D current_foot_center = {0};
+  if (current_left_ankle.inFrameLikelihood >= 0.3f &&
+      current_right_ankle.inFrameLikelihood >= 0.3f) {
+    current_foot_center.x =
+        (current_left_ankle.position.x + current_right_ankle.position.x) / 2.0f;
+    current_foot_center.y =
+        (current_left_ankle.position.y + current_right_ankle.position.y) / 2.0f;
+    current_foot_center.z =
+        (current_left_ankle.position.z + current_right_ankle.position.z) / 2.0f;
+  } else if (current_left_ankle.inFrameLikelihood >= 0.3f) {
+    current_foot_center = current_left_ankle.position;
+  } else if (current_right_ankle.inFrameLikelihood >= 0.3f) {
+    current_foot_center = current_right_ankle.position;
+  } else {
+    // 그냥 원본 목표 포즈 반환
+    *out_smart_target_pose = raw_end_pose;
+    // 스마트 목표 포즈가 원본과 같다면 원본과 비교해서 분석
+    return segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                                  out_similarity, out_corrections);
+  }
+
+  // 목표 포즈의 발 중심점 계산
+  PoseLandmark target_left_ankle =
+      raw_end_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
+  PoseLandmark target_right_ankle =
+      raw_end_pose.landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+
+  Point3D target_foot_center = {0};
+  if (target_left_ankle.inFrameLikelihood >= 0.3f &&
+      target_right_ankle.inFrameLikelihood >= 0.3f) {
+    target_foot_center.x =
+        (target_left_ankle.position.x + target_right_ankle.position.x) / 2.0f;
+    target_foot_center.y =
+        (target_left_ankle.position.y + target_right_ankle.position.y) / 2.0f;
+    target_foot_center.z =
+        (target_left_ankle.position.z + target_right_ankle.position.z) / 2.0f;
+  } else if (target_left_ankle.inFrameLikelihood >= 0.3f) {
+    target_foot_center = target_left_ankle.position;
+  } else if (target_right_ankle.inFrameLikelihood >= 0.3f) {
+    target_foot_center = target_right_ankle.position;
+  } else {
+    *out_smart_target_pose = raw_end_pose;
+    // 스마트 목표 포즈가 원본과 같다면 원본과 비교해서 분석
+    return segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                                  out_similarity, out_corrections);
+  }
+
+  // 8. 스마트 시작 포즈와 종료 포즈 생성
+  PoseData smart_start_pose = raw_start_pose;
+  *out_smart_target_pose = raw_end_pose;
+
+  // 8-1. 스마트 종료 포즈 조정
+  // 먼저 종료 포즈의 발 중심점을 원점으로 이동 (스케일링 기준점)
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    out_smart_target_pose->landmarks[i].position.x -= target_foot_center.x;
+    out_smart_target_pose->landmarks[i].position.y -= target_foot_center.y;
+    out_smart_target_pose->landmarks[i].position.z -= target_foot_center.z;
+  }
+
+  // 크기 조정 (스케일링)
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    out_smart_target_pose->landmarks[i].position.x *= scale;
+    out_smart_target_pose->landmarks[i].position.y *= scale;
+    out_smart_target_pose->landmarks[i].position.z *= scale;
+  }
+
+  // 현재 사용자의 발 중심점으로 이동
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    out_smart_target_pose->landmarks[i].position.x += current_foot_center.x;
+    out_smart_target_pose->landmarks[i].position.y += current_foot_center.y;
+    out_smart_target_pose->landmarks[i].position.z += current_foot_center.z;
+  }
+
+  // 8-2. 스마트 시작 포즈 조정
+  // 시작 포즈의 발 중심점 계산
+  PoseLandmark start_left_ankle =
+      raw_start_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
+  PoseLandmark start_right_ankle =
+      raw_start_pose.landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+
+  Point3D start_foot_center = {0};
+  if (start_left_ankle.inFrameLikelihood >= 0.3f &&
+      start_right_ankle.inFrameLikelihood >= 0.3f) {
+    start_foot_center.x =
+        (start_left_ankle.position.x + start_right_ankle.position.x) / 2.0f;
+    start_foot_center.y =
+        (start_left_ankle.position.y + start_right_ankle.position.y) / 2.0f;
+    start_foot_center.z =
+        (start_left_ankle.position.z + start_right_ankle.position.z) / 2.0f;
+  } else if (start_left_ankle.inFrameLikelihood >= 0.3f) {
+    start_foot_center = start_left_ankle.position;
+  } else if (start_right_ankle.inFrameLikelihood >= 0.3f) {
+    start_foot_center = start_right_ankle.position;
+  } else {
+    // 시작 포즈 발 중심점을 종료 포즈와 동일하게 설정
+    start_foot_center = target_foot_center;
+  }
+
+  // 먼저 시작 포즈의 발 중심점을 원점으로 이동 (스케일링 기준점)
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    smart_start_pose.landmarks[i].position.x -= start_foot_center.x;
+    smart_start_pose.landmarks[i].position.y -= start_foot_center.y;
+    smart_start_pose.landmarks[i].position.z -= start_foot_center.z;
+  }
+
+  // 크기 조정 (스케일링)
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    smart_start_pose.landmarks[i].position.x *= scale;
+    smart_start_pose.landmarks[i].position.y *= scale;
+    smart_start_pose.landmarks[i].position.z *= scale;
+  }
+
+  // 현재 사용자의 발 중심점으로 이동
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    smart_start_pose.landmarks[i].position.x += current_foot_center.x;
+    smart_start_pose.landmarks[i].position.y += current_foot_center.y;
+    smart_start_pose.landmarks[i].position.z += current_foot_center.z;
+  }
+
+  // 3. 스마트 목표 포즈와 비교해서 분석 수행
+  // 포즈 데이터 유효성 검사
+  if (!segment_validate_pose(current_pose)) {
+    return SEGMENT_ERROR_INVALID_POSE;
+  }
+
+  // 현재 포즈와 스마트 시작 포즈 → 스마트 종료 포즈 비교
+  float progress = calculate_segment_progress(current_pose, &smart_start_pose,
+                                              out_smart_target_pose, NULL, 0);
+
+  bool completed =
+      is_segment_completed(current_pose, out_smart_target_pose, NULL, 0, 0.8f);
+
+  float similarity =
+      segment_calculate_similarity(current_pose, out_smart_target_pose);
+
+  // 교정 벡터 계산 (스마트 목표 포즈 기준)
+  calculate_correction_vectors(current_pose, out_smart_target_pose, NULL, 0,
+                               out_corrections);
+
+  *out_progress = progress;
+  *out_is_complete = completed;
+  *out_similarity = similarity;
+
+  return SEGMENT_OK;
+}
+
+int segment_get_realtime_target_pose(const PoseData *current_pose,
+                                     PoseData *out_target_pose) {
+  if (!g_initialized || !g_segment_loaded) {
+    return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
+
+  if (!current_pose || !out_target_pose) {
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  // 현재는 단순히 변환된 종료 포즈 반환
+  // 추후 사용자 위치 기반 실시간 조정 로직 추가 예정
+  *out_target_pose = g_user_segment_end;
+
+  return SEGMENT_OK;
+}
+
+int segment_get_segment_info(int *out_segment_count) {
+  if (!g_initialized) {
+    return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
+
+  if (!out_segment_count) {
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  *out_segment_count = g_total_segment_count;
+  return SEGMENT_OK;
 }

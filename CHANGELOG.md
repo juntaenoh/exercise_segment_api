@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-09-17
+### Added
+- **향상된 세그먼트 관리 API**: 더 효율적인 워크아웃 관리
+  - `segment_load_all_segments()`: JSON 파일에서 모든 세그먼트 미리 로드
+  - `segment_set_current_segment()`: 미리 로드된 세그먼트 중 선택
+  - `segment_analyze_smart()`: 사용자 위치 기준 목표 포즈 반환
+  - `segment_get_segment_info()`: 세그먼트 정보 조회
+- **새로운 테스트 프로그램들**:
+  - `smart_demo.c`: 사용자 위치 기준 포즈 분석 데모
+  - `test_simple_feedback.c`: 간단한 피드백 테스트
+  - `test_joint_calibration.c`: 관절별 캘리브레이션 테스트
+  - `test_realtime_feedback.c`: 실시간 피드백 테스트
+- **Swift 호환성 강화**:
+  - `segment_calibrate_recorder_swift()`: Swift 친화적 기록자 캘리브레이션
+  - `segment_record_pose_swift()`: Swift 친화적 포즈 기록
+- **JSON 워크아웃 파일 생성 도구**:
+  - `create_test_json.c`: 테스트용 JSON 파일 생성
+  - `test_json_load.c`: JSON 파일 로드 테스트
+
+### Changed
+- **성능 최적화**: 전체 세그먼트 미리 로드로 분석 속도 향상
+- **메모리 관리 개선**: 효율적인 세그먼트 캐싱 시스템
+- **API 사용성 개선**: 더 직관적인 함수명과 매개변수 구조
+
+### Fixed
+- 세그먼트 로드 시 메모리 누수 문제 해결
+- 캘리브레이션 품질 검증 로직 개선
+- 다양한 체형에서의 정확도 향상
+
 ## [2.0.0] - 2025-09-10
 ### Added
 - **사용자 역할 분리**: A(기록자)와 B(사용자) 역할로 API 분리
