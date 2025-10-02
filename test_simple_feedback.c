@@ -103,7 +103,8 @@ int main() {
     Point3D corrections[POSE_LANDMARK_COUNT];
     PoseData target_pose;
 
-    int result = segment_analyze_smart(&current_pose, &progress, &similarity,
+    int result = segment_analyze_smart(&current_pose, SCALE_MODE_EXERCISE,
+                                       800.0f, 600.0f, &progress, &similarity,
                                        &is_complete, corrections, &target_pose);
 
     if (result == SEGMENT_OK) {

@@ -142,10 +142,11 @@ typedef struct {
  * 각 관절 간의 길이와 스케일 팩터
  */
 typedef struct {
-  float ideal_length; /* 이상적 길이 (표준 포즈 기준) */
-  float user_length;  /* 사용자 실제 길이 */
-  float scale_factor; /* 사용자/이상적 비율 */
-  bool is_valid;      /* 유효한 측정인지 여부 */
+  int connection_index; /* g_joint_connections 배열의 인덱스 */
+  float ideal_length;   /* 이상적 길이 (표준 포즈 기준) */
+  float user_length;    /* 사용자 실제 길이 */
+  float scale_factor;   /* 사용자/이상적 비율 */
+  bool is_valid;        /* 유효한 측정인지 여부 */
 } JointLength;
 
 /**
@@ -188,6 +189,14 @@ typedef struct {
   Point3D corrections[JOINT_COUNT]; /* 각 관절별 교정 방향 벡터 */
   uint64_t timestamp;               /* 분석 시점 */
 } SegmentOutput;
+
+/**
+ * @brief 스케일 모드 열거형
+ */
+typedef enum {
+  SCALE_MODE_MEASUREMENT = 0, // 측정 모드: 스케일 조정 안함
+  SCALE_MODE_EXERCISE = 1     // 운동 모드: 스케일 조정 함
+} ScaleMode;
 
 /**
  * @brief 에러 코드 열거형

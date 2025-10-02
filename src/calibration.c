@@ -98,7 +98,7 @@ int segment_calibrate_user(const PoseData *base_pose) {
   g_user_calibrated = true;
 
   // 관절별 길이 정보 출력
-  print_joint_lengths(&g_user_calibration);
+  // print_joint_lengths(&g_user_calibration);
 
   return SEGMENT_OK;
 }
@@ -258,13 +258,13 @@ float calculate_joint_distance(const PoseData *pose,
     return -1.0f;
   }
 
-  // 신뢰도 검사
-  float from_conf = pose->landmarks[from_joint].inFrameLikelihood;
-  float to_conf = pose->landmarks[to_joint].inFrameLikelihood;
+  // 신뢰도 검사 제거 - 모든 관절 측정
+  // float from_conf = pose->landmarks[from_joint].inFrameLikelihood;
+  // float to_conf = pose->landmarks[to_joint].inFrameLikelihood;
 
-  if (from_conf < 0.3f || to_conf < 0.3f) {
-    return -1.0f; // 신뢰도가 너무 낮음
-  }
+  // if (from_conf < 0.3f || to_conf < 0.3f) {
+  //   return -1.0f; // 신뢰도가 너무 낮음
+  // }
 
   // 3D 거리 계산
   return distance_3d(&pose->landmarks[from_joint].position,
@@ -320,6 +320,7 @@ int segment_calibrate_joint_lengths(const PoseData *base_pose,
     JointLength *joint_length =
         &out_calibration->joint_lengths
              .lengths[out_calibration->joint_lengths.count];
+    joint_length->connection_index = i; // 연결 인덱스 저장
     joint_length->ideal_length = ideal_length;
     joint_length->user_length = user_length;
     joint_length->scale_factor = scale_factor;
@@ -349,7 +350,7 @@ int apply_joint_length_calibration(const PoseData *original_pose,
 
   // 관절별 길이 켈리브레이션 적용
   for (int i = 0; i < calibration->joint_lengths.count; i++) {
-    JointLength *joint_length = &calibration->joint_lengths.lengths[i];
+    const JointLength *joint_length = &calibration->joint_lengths.lengths[i];
 
     if (!joint_length->is_valid) {
       continue;
@@ -396,8 +397,9 @@ void print_joint_lengths(const CalibrationData *calibration) {
   printf("=====================================\n");
 
   for (int i = 0; i < calibration->joint_lengths.count; i++) {
-    JointLength *joint_length = &calibration->joint_lengths.lengths[i];
-    JointConnection *conn = &g_joint_connections[i];
+    const JointLength *joint_length = &calibration->joint_lengths.lengths[i];
+    int conn_idx = joint_length->connection_index; // 저장된 인덱스 사용 ⭐
+    JointConnection *conn = &g_joint_connections[conn_idx];
 
     if (joint_length->is_valid) {
       printf("  %s:\n", conn->name);

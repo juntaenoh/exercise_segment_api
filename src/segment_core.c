@@ -758,11 +758,11 @@ SegmentOutput segment_analyze(const PoseData *current_pose) {
       current_pose, &g_user_segment_start, &g_user_segment_end, NULL,
       0); // 모든 관절 사용
 
-  bool completed =
-      is_segment_completed(current_pose, &g_user_segment_end, NULL, 0, 0.8f);
-
   float similarity =
       segment_calculate_similarity(current_pose, &g_user_segment_end);
+
+  // 완료 판단: 유사도 기반 (앱에서 최종 판단 권장)
+  bool completed = (similarity >= 0.8f);
 
   // 교정 벡터 계산
   calculate_correction_vectors(current_pose, &g_user_segment_end, NULL, 0,
@@ -807,11 +807,11 @@ int segment_analyze_simple(const PoseData *current_pose, float *out_progress,
   float progress = calculate_segment_progress(
       current_pose, &g_user_segment_start, &g_user_segment_end, NULL, 0);
 
-  bool completed =
-      is_segment_completed(current_pose, &g_user_segment_end, NULL, 0, 0.8f);
-
   float similarity =
       segment_calculate_similarity(current_pose, &g_user_segment_end);
+
+  // 완료 판단: 유사도 기반 (앱에서 최종 판단 권장)
+  bool completed = (similarity >= 0.8f);
 
   // 교정 벡터 계산
   calculate_correction_vectors(current_pose, &g_user_segment_end, NULL, 0,
@@ -1292,9 +1292,10 @@ int segment_analyze_with_target_pose(const PoseData *current_pose,
   return SEGMENT_OK;
 }
 
-int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
-                          float *out_similarity, bool *out_is_complete,
-                          Point3D *out_corrections,
+int segment_analyze_smart(const PoseData *current_pose, ScaleMode scale_mode,
+                          float screen_width, float screen_height,
+                          float *out_progress, float *out_similarity,
+                          bool *out_is_complete, Point3D *out_corrections,
                           PoseData *out_smart_target_pose) {
 
   if (!current_pose || !out_progress || !out_similarity || !out_is_complete ||
@@ -1304,6 +1305,52 @@ int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
 
   if (!g_initialized || !g_segment_loaded) {
     return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
+
+  // 0. 현재 포즈의 신뢰도 체크 (팔다리 필수 랜드마크 체크)
+  int valid_landmarks = 0;
+  int valid_arms = 0;
+  int valid_legs = 0;
+
+  // 팔 랜드마크 체크 (어깨, 팔꿈치, 손목)
+  int arm_landmarks[] = {
+      POSE_LANDMARK_LEFT_SHOULDER, POSE_LANDMARK_RIGHT_SHOULDER,
+      POSE_LANDMARK_LEFT_ELBOW,    POSE_LANDMARK_RIGHT_ELBOW,
+      POSE_LANDMARK_LEFT_WRIST,    POSE_LANDMARK_RIGHT_WRIST};
+
+  // 다리 랜드마크 체크 (골반, 무릎, 발목)
+  int leg_landmarks[] = {POSE_LANDMARK_LEFT_HIP,   POSE_LANDMARK_RIGHT_HIP,
+                         POSE_LANDMARK_LEFT_KNEE,  POSE_LANDMARK_RIGHT_KNEE,
+                         POSE_LANDMARK_LEFT_ANKLE, POSE_LANDMARK_RIGHT_ANKLE};
+
+  // 전체 랜드마크 유효성 체크
+  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+    if (current_pose->landmarks[i].inFrameLikelihood >= 0.3f) {
+      valid_landmarks++;
+    }
+  }
+
+  // 팔 랜드마크 유효성 체크
+  for (int i = 0; i < 6; i++) {
+    if (current_pose->landmarks[arm_landmarks[i]].inFrameLikelihood >= 0.3f) {
+      valid_arms++;
+    }
+  }
+
+  // 다리 랜드마크 유효성 체크
+  for (int i = 0; i < 6; i++) {
+    if (current_pose->landmarks[leg_landmarks[i]].inFrameLikelihood >= 0.3f) {
+      valid_legs++;
+    }
+  }
+
+  // 최소 조건: 전체 8개 이상, 팔 3개 이상, 다리 3개 이상
+  if (valid_landmarks < 8 || valid_arms < 3 || valid_legs < 3) {
+    *out_progress = 0.0f;
+    *out_similarity = 0.0f;
+    *out_is_complete = false;
+    *out_smart_target_pose = g_user_segment_end; // 원본 종료 포즈 반환
+    return SEGMENT_OK; // 에러가 아닌 정상적인 조기 리턴
   }
 
   // 1. 원본 시작 포즈와 종료 포즈 가져오기
@@ -1331,6 +1378,10 @@ int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
                                   out_similarity, out_corrections);
   }
 
+  // 2. 스케일 모드에 따른 처리
+  // 두 모드 모두 스케일 조정은 함 (사용자 체형에 맞춤)
+  // 차이점: 위치 변환 여부
+
   // 4. 종료 포즈의 크기 측정 (어깨 너비 기준)
   PoseLandmark target_left_shoulder =
       raw_end_pose.landmarks[POSE_LANDMARK_LEFT_SHOULDER];
@@ -1353,61 +1404,228 @@ int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
   }
 
   // 5. 크기 조정을 위한 스케일 계산
-  float scale = (target_shoulder_width > 0)
-                    ? current_shoulder_width / target_shoulder_width
-                    : 1.0f;
+  float scale = 1.0f;
 
-  // 6. 현재 사용자의 발 중심점 계산
-  PoseLandmark current_left_ankle =
-      current_pose->landmarks[POSE_LANDMARK_LEFT_ANKLE];
-  PoseLandmark current_right_ankle =
-      current_pose->landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+  if (scale_mode == SCALE_MODE_EXERCISE) {
+    // 운동 모드: 어깨 사이 거리 기준
+    float current_shoulder_width = 0.0f;
+    float target_shoulder_width = 0.0f;
 
-  Point3D current_foot_center = {0};
-  if (current_left_ankle.inFrameLikelihood >= 0.3f &&
-      current_right_ankle.inFrameLikelihood >= 0.3f) {
-    current_foot_center.x =
-        (current_left_ankle.position.x + current_right_ankle.position.x) / 2.0f;
-    current_foot_center.y =
-        (current_left_ankle.position.y + current_right_ankle.position.y) / 2.0f;
-    current_foot_center.z =
-        (current_left_ankle.position.z + current_right_ankle.position.z) / 2.0f;
-  } else if (current_left_ankle.inFrameLikelihood >= 0.3f) {
-    current_foot_center = current_left_ankle.position;
-  } else if (current_right_ankle.inFrameLikelihood >= 0.3f) {
-    current_foot_center = current_right_ankle.position;
+    // 현재 포즈의 어깨 너비 계산
+    if (current_left_shoulder.inFrameLikelihood >= 0.3f &&
+        current_right_shoulder.inFrameLikelihood >= 0.3f) {
+      float dx =
+          current_left_shoulder.position.x - current_right_shoulder.position.x;
+      float dy =
+          current_left_shoulder.position.y - current_right_shoulder.position.y;
+      current_shoulder_width = sqrtf(dx * dx + dy * dy);
+    }
+
+    // 타겟 포즈의 어깨 너비 계산
+    if (target_left_shoulder.inFrameLikelihood >= 0.3f &&
+        target_right_shoulder.inFrameLikelihood >= 0.3f) {
+      float dx =
+          target_left_shoulder.position.x - target_right_shoulder.position.x;
+      float dy =
+          target_left_shoulder.position.y - target_right_shoulder.position.y;
+      target_shoulder_width = sqrtf(dx * dx + dy * dy);
+    }
+
+    scale = (target_shoulder_width > 0)
+                ? current_shoulder_width / target_shoulder_width
+                : 1.0f;
+
   } else {
-    // 그냥 원본 목표 포즈 반환
-    *out_smart_target_pose = raw_end_pose;
-    // 스마트 목표 포즈가 원본과 같다면 원본과 비교해서 분석
-    return segment_analyze_simple(current_pose, out_progress, out_is_complete,
-                                  out_similarity, out_corrections);
+    // 측정 모드: 어깨-발목 거리 기준 (기존 방식)
+    float current_shoulder_ankle_distance = 0.0f;
+    float target_shoulder_ankle_distance = 0.0f;
+
+    // 현재 포즈의 왼쪽 발목 랜드마크 가져오기
+    PoseLandmark current_left_ankle =
+        current_pose->landmarks[POSE_LANDMARK_LEFT_ANKLE];
+
+    // 현재 포즈의 왼쪽 어깨-발목 거리 계산
+    if (current_left_shoulder.inFrameLikelihood >= 0.3f &&
+        current_left_ankle.inFrameLikelihood >= 0.3f) {
+      float dx =
+          current_left_shoulder.position.x - current_left_ankle.position.x;
+      float dy =
+          current_left_shoulder.position.y - current_left_ankle.position.y;
+      float dz =
+          current_left_shoulder.position.z - current_left_ankle.position.z;
+      current_shoulder_ankle_distance = sqrtf(dx * dx + dy * dy + dz * dz);
+    }
+
+    // 타겟 포즈의 왼쪽 발목 랜드마크 가져오기
+    PoseLandmark target_left_ankle =
+        raw_end_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
+
+    // 타겟 포즈의 왼쪽 어깨-발목 거리 계산
+    if (target_left_shoulder.inFrameLikelihood >= 0.3f &&
+        target_left_ankle.inFrameLikelihood >= 0.3f) {
+      float dx = target_left_shoulder.position.x - target_left_ankle.position.x;
+      float dy = target_left_shoulder.position.y - target_left_ankle.position.y;
+      float dz = target_left_shoulder.position.z - target_left_ankle.position.z;
+      target_shoulder_ankle_distance = sqrtf(dx * dx + dy * dy + dz * dz);
+    }
+
+    scale =
+        (target_shoulder_ankle_distance > 0)
+            ? current_shoulder_ankle_distance / target_shoulder_ankle_distance
+            : 1.0f;
   }
 
-  // 목표 포즈의 발 중심점 계산
-  PoseLandmark target_left_ankle =
-      raw_end_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
-  PoseLandmark target_right_ankle =
-      raw_end_pose.landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+  // 6. 현재 사용자의 중심점 계산 (운동 모드: 발 중심, 측정 모드: 골반 중심)
+  Point3D current_center = {0};
 
-  Point3D target_foot_center = {0};
-  if (target_left_ankle.inFrameLikelihood >= 0.3f &&
-      target_right_ankle.inFrameLikelihood >= 0.3f) {
-    target_foot_center.x =
-        (target_left_ankle.position.x + target_right_ankle.position.x) / 2.0f;
-    target_foot_center.y =
-        (target_left_ankle.position.y + target_right_ankle.position.y) / 2.0f;
-    target_foot_center.z =
-        (target_left_ankle.position.z + target_right_ankle.position.z) / 2.0f;
-  } else if (target_left_ankle.inFrameLikelihood >= 0.3f) {
-    target_foot_center = target_left_ankle.position;
-  } else if (target_right_ankle.inFrameLikelihood >= 0.3f) {
-    target_foot_center = target_right_ankle.position;
+  if (scale_mode == SCALE_MODE_EXERCISE) {
+    // 운동 모드: 발과 발 사이 중심점 계산
+    PoseLandmark current_left_ankle =
+        current_pose->landmarks[POSE_LANDMARK_LEFT_ANKLE];
+    PoseLandmark current_right_ankle =
+        current_pose->landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+
+    if (current_left_ankle.inFrameLikelihood >= 0.3f &&
+        current_right_ankle.inFrameLikelihood >= 0.3f) {
+      current_center.x =
+          (current_left_ankle.position.x + current_right_ankle.position.x) /
+          2.0f;
+      current_center.y =
+          (current_left_ankle.position.y + current_right_ankle.position.y) /
+          2.0f;
+      current_center.z =
+          (current_left_ankle.position.z + current_right_ankle.position.z) /
+          2.0f;
+    } else if (current_left_ankle.inFrameLikelihood >= 0.3f) {
+      current_center = current_left_ankle.position;
+    } else if (current_right_ankle.inFrameLikelihood >= 0.3f) {
+      current_center = current_right_ankle.position;
+    } else {
+      // 발이 감지되지 않으면 골반 중심으로 대체
+      PoseLandmark current_left_hip =
+          current_pose->landmarks[POSE_LANDMARK_LEFT_HIP];
+      PoseLandmark current_right_hip =
+          current_pose->landmarks[POSE_LANDMARK_RIGHT_HIP];
+
+      if (current_left_hip.inFrameLikelihood >= 0.3f &&
+          current_right_hip.inFrameLikelihood >= 0.3f) {
+        current_center.x =
+            (current_left_hip.position.x + current_right_hip.position.x) / 2.0f;
+        current_center.y =
+            (current_left_hip.position.y + current_right_hip.position.y) / 2.0f;
+        current_center.z =
+            (current_left_hip.position.z + current_right_hip.position.z) / 2.0f;
+      } else if (current_left_hip.inFrameLikelihood >= 0.3f) {
+        current_center = current_left_hip.position;
+      } else if (current_right_hip.inFrameLikelihood >= 0.3f) {
+        current_center = current_right_hip.position;
+      } else {
+        // 그냥 원본 목표 포즈 반환
+        *out_smart_target_pose = raw_end_pose;
+        return segment_analyze_simple(current_pose, out_progress,
+                                      out_is_complete, out_similarity,
+                                      out_corrections);
+      }
+    }
   } else {
-    *out_smart_target_pose = raw_end_pose;
-    // 스마트 목표 포즈가 원본과 같다면 원본과 비교해서 분석
-    return segment_analyze_simple(current_pose, out_progress, out_is_complete,
-                                  out_similarity, out_corrections);
+    // 측정 모드: 골반 중심점 계산
+    PoseLandmark current_left_hip =
+        current_pose->landmarks[POSE_LANDMARK_LEFT_HIP];
+    PoseLandmark current_right_hip =
+        current_pose->landmarks[POSE_LANDMARK_RIGHT_HIP];
+
+    if (current_left_hip.inFrameLikelihood >= 0.3f &&
+        current_right_hip.inFrameLikelihood >= 0.3f) {
+      current_center.x =
+          (current_left_hip.position.x + current_right_hip.position.x) / 2.0f;
+      current_center.y =
+          (current_left_hip.position.y + current_right_hip.position.y) / 2.0f;
+      current_center.z =
+          (current_left_hip.position.z + current_right_hip.position.z) / 2.0f;
+    } else if (current_left_hip.inFrameLikelihood >= 0.3f) {
+      current_center = current_left_hip.position;
+    } else if (current_right_hip.inFrameLikelihood >= 0.3f) {
+      current_center = current_right_hip.position;
+    } else {
+      // 그냥 원본 목표 포즈 반환
+      *out_smart_target_pose = raw_end_pose;
+      return segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                                    out_similarity, out_corrections);
+    }
+  }
+
+  // 목표 포즈의 중심점 계산 (운동 모드: 발목 중심, 측정 모드: 골반 중심)
+  Point3D target_center = {0};
+
+  if (scale_mode == SCALE_MODE_EXERCISE) {
+    // 운동 모드: 타겟 포즈의 발목 중심점 계산
+    PoseLandmark target_left_ankle =
+        raw_end_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
+    PoseLandmark target_right_ankle =
+        raw_end_pose.landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+
+    if (target_left_ankle.inFrameLikelihood >= 0.3f &&
+        target_right_ankle.inFrameLikelihood >= 0.3f) {
+      target_center.x =
+          (target_left_ankle.position.x + target_right_ankle.position.x) / 2.0f;
+      target_center.y =
+          (target_left_ankle.position.y + target_right_ankle.position.y) / 2.0f;
+      target_center.z =
+          (target_left_ankle.position.z + target_right_ankle.position.z) / 2.0f;
+    } else if (target_left_ankle.inFrameLikelihood >= 0.3f) {
+      target_center = target_left_ankle.position;
+    } else if (target_right_ankle.inFrameLikelihood >= 0.3f) {
+      target_center = target_right_ankle.position;
+    } else {
+      // 발목이 감지되지 않으면 골반 중심으로 대체
+      PoseLandmark target_left_hip =
+          raw_end_pose.landmarks[POSE_LANDMARK_LEFT_HIP];
+      PoseLandmark target_right_hip =
+          raw_end_pose.landmarks[POSE_LANDMARK_RIGHT_HIP];
+
+      if (target_left_hip.inFrameLikelihood >= 0.3f &&
+          target_right_hip.inFrameLikelihood >= 0.3f) {
+        target_center.x =
+            (target_left_hip.position.x + target_right_hip.position.x) / 2.0f;
+        target_center.y =
+            (target_left_hip.position.y + target_right_hip.position.y) / 2.0f;
+        target_center.z =
+            (target_left_hip.position.z + target_right_hip.position.z) / 2.0f;
+      } else if (target_left_hip.inFrameLikelihood >= 0.3f) {
+        target_center = target_left_hip.position;
+      } else if (target_right_hip.inFrameLikelihood >= 0.3f) {
+        target_center = target_right_hip.position;
+      } else {
+        *out_smart_target_pose = raw_end_pose;
+        return segment_analyze_simple(current_pose, out_progress,
+                                      out_is_complete, out_similarity,
+                                      out_corrections);
+      }
+    }
+  } else {
+    // 측정 모드: 타겟 포즈의 골반 중심점 계산
+    PoseLandmark target_left_hip =
+        raw_end_pose.landmarks[POSE_LANDMARK_LEFT_HIP];
+    PoseLandmark target_right_hip =
+        raw_end_pose.landmarks[POSE_LANDMARK_RIGHT_HIP];
+
+    if (target_left_hip.inFrameLikelihood >= 0.3f &&
+        target_right_hip.inFrameLikelihood >= 0.3f) {
+      target_center.x =
+          (target_left_hip.position.x + target_right_hip.position.x) / 2.0f;
+      target_center.y =
+          (target_left_hip.position.y + target_right_hip.position.y) / 2.0f;
+      target_center.z =
+          (target_left_hip.position.z + target_right_hip.position.z) / 2.0f;
+    } else if (target_left_hip.inFrameLikelihood >= 0.3f) {
+      target_center = target_left_hip.position;
+    } else if (target_right_hip.inFrameLikelihood >= 0.3f) {
+      target_center = target_right_hip.position;
+    } else {
+      *out_smart_target_pose = raw_end_pose;
+      return segment_analyze_simple(current_pose, out_progress, out_is_complete,
+                                    out_similarity, out_corrections);
+    }
   }
 
   // 8. 스마트 시작 포즈와 종료 포즈 생성
@@ -1415,71 +1633,151 @@ int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
   *out_smart_target_pose = raw_end_pose;
 
   // 8-1. 스마트 종료 포즈 조정
-  // 먼저 종료 포즈의 발 중심점을 원점으로 이동 (스케일링 기준점)
+
+  // 1단계: 타겟 포즈의 중심을 원점으로 이동
   for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
-    out_smart_target_pose->landmarks[i].position.x -= target_foot_center.x;
-    out_smart_target_pose->landmarks[i].position.y -= target_foot_center.y;
-    out_smart_target_pose->landmarks[i].position.z -= target_foot_center.z;
+    out_smart_target_pose->landmarks[i].position.x -= target_center.x;
+    out_smart_target_pose->landmarks[i].position.y -= target_center.y;
+    out_smart_target_pose->landmarks[i].position.z -= target_center.z;
   }
 
-  // 크기 조정 (스케일링)
   for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
     out_smart_target_pose->landmarks[i].position.x *= scale;
     out_smart_target_pose->landmarks[i].position.y *= scale;
     out_smart_target_pose->landmarks[i].position.z *= scale;
   }
 
-  // 현재 사용자의 발 중심점으로 이동
-  for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
-    out_smart_target_pose->landmarks[i].position.x += current_foot_center.x;
-    out_smart_target_pose->landmarks[i].position.y += current_foot_center.y;
-    out_smart_target_pose->landmarks[i].position.z += current_foot_center.z;
+  // 모드에 따른 위치 변환
+  if (scale_mode == SCALE_MODE_EXERCISE) {
+    // 운동 모드: 사용자 발 중심 따라다님
+    for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+      out_smart_target_pose->landmarks[i].position.x += current_center.x;
+      out_smart_target_pose->landmarks[i].position.y += current_center.y;
+      out_smart_target_pose->landmarks[i].position.z += current_center.z;
+    }
+  } else {
+    // 측정 모드: 좌우는 화면 중앙 고정, 위아래는 사용자 따라다님
+    float screen_center_x = screen_width / 2.0f;
+
+    // 포즈의 X 중심점 계산 (좌우 중앙 고정용)
+    Point3D pose_center_x = {0.0f, 0.0f, 0.0f};
+    int valid_landmarks = 0;
+
+    for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+      if (out_smart_target_pose->landmarks[i].inFrameLikelihood >= 0.3f) {
+        pose_center_x.x += out_smart_target_pose->landmarks[i].position.x;
+        valid_landmarks++;
+      }
+    }
+
+    if (valid_landmarks > 0) {
+      pose_center_x.x /= valid_landmarks;
+    }
+
+    // X축만 화면 중앙에 고정, Y축은 사용자 골반 중심점 따라다님
+    float offset_x = screen_center_x - pose_center_x.x;
+
+    for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
+      out_smart_target_pose->landmarks[i].position.x +=
+          offset_x; // X축만 화면 중앙 고정
+      out_smart_target_pose->landmarks[i].position.y +=
+          current_center.y; // Y축은 사용자 중심 따라다님
+      out_smart_target_pose->landmarks[i].position.z +=
+          current_center.z; // Z축도 사용자 중심 따라다님
+    }
   }
 
   // 8-2. 스마트 시작 포즈 조정
-  // 시작 포즈의 발 중심점 계산
-  PoseLandmark start_left_ankle =
-      raw_start_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
-  PoseLandmark start_right_ankle =
-      raw_start_pose.landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+  // 시작 포즈의 중심점 계산 (운동 모드: 발목 중심, 측정 모드: 골반 중심)
+  Point3D start_center = {0};
 
-  Point3D start_foot_center = {0};
-  if (start_left_ankle.inFrameLikelihood >= 0.3f &&
-      start_right_ankle.inFrameLikelihood >= 0.3f) {
-    start_foot_center.x =
-        (start_left_ankle.position.x + start_right_ankle.position.x) / 2.0f;
-    start_foot_center.y =
-        (start_left_ankle.position.y + start_right_ankle.position.y) / 2.0f;
-    start_foot_center.z =
-        (start_left_ankle.position.z + start_right_ankle.position.z) / 2.0f;
-  } else if (start_left_ankle.inFrameLikelihood >= 0.3f) {
-    start_foot_center = start_left_ankle.position;
-  } else if (start_right_ankle.inFrameLikelihood >= 0.3f) {
-    start_foot_center = start_right_ankle.position;
+  if (scale_mode == SCALE_MODE_EXERCISE) {
+    // 운동 모드: 시작 포즈의 발목 중심점 계산
+    PoseLandmark start_left_ankle =
+        raw_start_pose.landmarks[POSE_LANDMARK_LEFT_ANKLE];
+    PoseLandmark start_right_ankle =
+        raw_start_pose.landmarks[POSE_LANDMARK_RIGHT_ANKLE];
+
+    if (start_left_ankle.inFrameLikelihood >= 0.3f &&
+        start_right_ankle.inFrameLikelihood >= 0.3f) {
+      start_center.x =
+          (start_left_ankle.position.x + start_right_ankle.position.x) / 2.0f;
+      start_center.y =
+          (start_left_ankle.position.y + start_right_ankle.position.y) / 2.0f;
+      start_center.z =
+          (start_left_ankle.position.z + start_right_ankle.position.z) / 2.0f;
+    } else if (start_left_ankle.inFrameLikelihood >= 0.3f) {
+      start_center = start_left_ankle.position;
+    } else if (start_right_ankle.inFrameLikelihood >= 0.3f) {
+      start_center = start_right_ankle.position;
+    } else {
+      // 발목이 감지되지 않으면 골반 중심으로 대체
+      PoseLandmark start_left_hip =
+          raw_start_pose.landmarks[POSE_LANDMARK_LEFT_HIP];
+      PoseLandmark start_right_hip =
+          raw_start_pose.landmarks[POSE_LANDMARK_RIGHT_HIP];
+
+      if (start_left_hip.inFrameLikelihood >= 0.3f &&
+          start_right_hip.inFrameLikelihood >= 0.3f) {
+        start_center.x =
+            (start_left_hip.position.x + start_right_hip.position.x) / 2.0f;
+        start_center.y =
+            (start_left_hip.position.y + start_right_hip.position.y) / 2.0f;
+        start_center.z =
+            (start_left_hip.position.z + start_right_hip.position.z) / 2.0f;
+      } else if (start_left_hip.inFrameLikelihood >= 0.3f) {
+        start_center = start_left_hip.position;
+      } else if (start_right_hip.inFrameLikelihood >= 0.3f) {
+        start_center = start_right_hip.position;
+      } else {
+        // 시작 포즈 중심점을 종료 포즈와 동일하게 설정
+        start_center = target_center;
+      }
+    }
   } else {
-    // 시작 포즈 발 중심점을 종료 포즈와 동일하게 설정
-    start_foot_center = target_foot_center;
+    // 측정 모드: 시작 포즈의 골반 중심점 계산
+    PoseLandmark start_left_hip =
+        raw_start_pose.landmarks[POSE_LANDMARK_LEFT_HIP];
+    PoseLandmark start_right_hip =
+        raw_start_pose.landmarks[POSE_LANDMARK_RIGHT_HIP];
+
+    if (start_left_hip.inFrameLikelihood >= 0.3f &&
+        start_right_hip.inFrameLikelihood >= 0.3f) {
+      start_center.x =
+          (start_left_hip.position.x + start_right_hip.position.x) / 2.0f;
+      start_center.y =
+          (start_left_hip.position.y + start_right_hip.position.y) / 2.0f;
+      start_center.z =
+          (start_left_hip.position.z + start_right_hip.position.z) / 2.0f;
+    } else if (start_left_hip.inFrameLikelihood >= 0.3f) {
+      start_center = start_left_hip.position;
+    } else if (start_right_hip.inFrameLikelihood >= 0.3f) {
+      start_center = start_right_hip.position;
+    } else {
+      // 시작 포즈 중심점을 종료 포즈와 동일하게 설정
+      start_center = target_center;
+    }
   }
 
-  // 먼저 시작 포즈의 발 중심점을 원점으로 이동 (스케일링 기준점)
+  // 1단계: 시작 포즈의 중심을 원점으로 이동
   for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
-    smart_start_pose.landmarks[i].position.x -= start_foot_center.x;
-    smart_start_pose.landmarks[i].position.y -= start_foot_center.y;
-    smart_start_pose.landmarks[i].position.z -= start_foot_center.z;
+    smart_start_pose.landmarks[i].position.x -= start_center.x;
+    smart_start_pose.landmarks[i].position.y -= start_center.y;
+    smart_start_pose.landmarks[i].position.z -= start_center.z;
   }
 
-  // 크기 조정 (스케일링)
+  // 2단계: 현재 키에 맞춰 전체 스케일 적용
   for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
     smart_start_pose.landmarks[i].position.x *= scale;
     smart_start_pose.landmarks[i].position.y *= scale;
     smart_start_pose.landmarks[i].position.z *= scale;
   }
 
-  // 현재 사용자의 발 중심점으로 이동
+  // 3단계: 현재 사용자의 중심 위치로 이동
   for (int i = 0; i < POSE_LANDMARK_COUNT; i++) {
-    smart_start_pose.landmarks[i].position.x += current_foot_center.x;
-    smart_start_pose.landmarks[i].position.y += current_foot_center.y;
-    smart_start_pose.landmarks[i].position.z += current_foot_center.z;
+    smart_start_pose.landmarks[i].position.x += current_center.x;
+    smart_start_pose.landmarks[i].position.y += current_center.y;
+    smart_start_pose.landmarks[i].position.z += current_center.z;
   }
 
   // 3. 스마트 목표 포즈와 비교해서 분석 수행
@@ -1492,11 +1790,11 @@ int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
   float progress = calculate_segment_progress(current_pose, &smart_start_pose,
                                               out_smart_target_pose, NULL, 0);
 
-  bool completed =
-      is_segment_completed(current_pose, out_smart_target_pose, NULL, 0, 0.8f);
-
   float similarity =
       segment_calculate_similarity(current_pose, out_smart_target_pose);
+
+  // 완료 판단: 유사도 기반 (앱에서 최종 판단 권장)
+  bool completed = (similarity >= 0.8f);
 
   // 교정 벡터 계산 (스마트 목표 포즈 기준)
   calculate_correction_vectors(current_pose, out_smart_target_pose, NULL, 0,

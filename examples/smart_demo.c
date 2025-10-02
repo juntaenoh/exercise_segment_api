@@ -146,12 +146,13 @@ int main(void) {
     Point3D corrections[POSE_LANDMARK_COUNT];
     PoseData smart_target_pose = {0};
 
-    result =
-        segment_analyze_smart(&current_pose, // 현재 포즈만 넣으면
-                              &progress,     // 분석 결과들과
-                              &similarity, &is_complete, corrections,
-                              &smart_target_pose // 사용자 위치 기준 목표 포즈!
-        );
+    result = segment_analyze_smart(
+        &current_pose, SCALE_MODE_EXERCISE, // 운동 모드로 스케일 조정
+        800.0f, 600.0f,                     // 화면 크기 (너비, 높이)
+        &progress,                          // 분석 결과들과
+        &similarity, &is_complete, corrections,
+        &smart_target_pose // 화면 중앙 고정 목표 포즈!
+    );
 
     if (result == SEGMENT_OK) {
       print_pose_summary(&smart_target_pose,

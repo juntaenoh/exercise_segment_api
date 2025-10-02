@@ -181,6 +181,9 @@ int segment_set_current_segment(int start_index, int end_index);
 /**
  * @brief 실시간 포즈 분석 (사용자 위치 기준 목표 포즈)
  * @param current_pose 현재 사용자 포즈
+ * @param scale_mode 스케일 모드 (측정/운동)
+ * @param screen_width 화면 너비
+ * @param screen_height 화면 높이
  * @param out_progress 진행도 출력 (0.0~1.0)
  * @param out_similarity 유사도 출력 (0.0~1.0)
  * @param out_is_complete 완료 여부 출력
@@ -188,9 +191,11 @@ int segment_set_current_segment(int start_index, int end_index);
  * @param out_target_pose 사용자 위치 기준으로 맞춰진 목표 포즈
  * @return SEGMENT_OK 성공, 음수 에러 코드
  */
-int segment_analyze_smart(const PoseData *current_pose, float *out_progress,
-                          float *out_similarity, bool *out_is_complete,
-                          Point3D *out_corrections, PoseData *out_target_pose);
+int segment_analyze_smart(const PoseData *current_pose, ScaleMode scale_mode,
+                          float screen_width, float screen_height,
+                          float *out_progress, float *out_similarity,
+                          bool *out_is_complete, Point3D *out_corrections,
+                          PoseData *out_target_pose);
 
 /**
  * @brief 세그먼트 정보 조회

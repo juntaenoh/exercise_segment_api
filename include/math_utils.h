@@ -20,7 +20,7 @@ extern "C" {
  * @param p2 두 번째 점
  * @return 거리 값
  */
-float distance_2d(const Point2D* p1, const Point2D* p2);
+float distance_2d(const Point2D *p1, const Point2D *p2);
 
 /**
  * @brief 두 3D 점 사이의 유클리드 거리 계산
@@ -28,7 +28,7 @@ float distance_2d(const Point2D* p1, const Point2D* p2);
  * @param p2 두 번째 점
  * @return 거리 값
  */
-float distance_3d(const Point3D* p1, const Point3D* p2);
+float distance_3d(const Point3D *p1, const Point3D *p2);
 
 /**
  * @brief 두 2D 점의 합 계산
@@ -36,7 +36,7 @@ float distance_3d(const Point3D* p1, const Point3D* p2);
  * @param p2 두 번째 점
  * @return 합계 점
  */
-Point2D add_points(const Point2D* p1, const Point2D* p2);
+Point2D add_points(const Point2D *p1, const Point2D *p2);
 
 /**
  * @brief 두 2D 점의 차 계산
@@ -44,7 +44,7 @@ Point2D add_points(const Point2D* p1, const Point2D* p2);
  * @param p2 두 번째 점
  * @return 차이 점
  */
-Point2D subtract_points(const Point2D* p1, const Point2D* p2);
+Point2D subtract_points(const Point2D *p1, const Point2D *p2);
 
 /**
  * @brief 2D 점에 스칼라 곱하기
@@ -52,14 +52,14 @@ Point2D subtract_points(const Point2D* p1, const Point2D* p2);
  * @param scalar 스칼라 값
  * @return 곱한 결과 점
  */
-Point2D multiply_point(const Point2D* p, float scalar);
+Point2D multiply_point(const Point2D *p, float scalar);
 
 /**
  * @brief 포즈의 중심점 계산
  * @param pose 포즈 데이터
  * @return 중심점
  */
-Point2D calculate_center_point(const PoseData* pose);
+Point2D calculate_center_point(const PoseData *pose);
 
 /**
  * @brief 포즈의 중심점 계산 (특정 관절들만)
@@ -68,9 +68,9 @@ Point2D calculate_center_point(const PoseData* pose);
  * @param joint_count 관절 개수
  * @return 중심점
  */
-Point2D calculate_center_point_selected(const PoseData* pose, 
-                                       const JointType* joints, 
-                                       int joint_count);
+Point2D calculate_center_point_selected(const PoseData *pose,
+                                        const JointType *joints,
+                                        int joint_count);
 
 /**
  * @brief 두 포즈 간 선형 보간
@@ -79,10 +79,8 @@ Point2D calculate_center_point_selected(const PoseData* pose,
  * @param t 보간 계수 (0.0~1.0)
  * @param result 보간 결과를 저장할 포즈
  */
-void interpolate_pose(const PoseData* start, 
-                     const PoseData* end, 
-                     float t, 
-                     PoseData* result);
+void interpolate_pose(const PoseData *start, const PoseData *end, float t,
+                      PoseData *result);
 
 /**
  * @brief 값을 지정된 범위로 제한
@@ -106,7 +104,7 @@ float fast_sqrt(float x);
  * @param scale_factor 스케일 팩터
  * @param result 스케일된 포즈를 저장할 구조체
  */
-void scale_pose(const PoseData* pose, float scale_factor, PoseData* result);
+void scale_pose(const PoseData *pose, float scale_factor, PoseData *result);
 
 /**
  * @brief 포즈를 이동
@@ -114,7 +112,8 @@ void scale_pose(const PoseData* pose, float scale_factor, PoseData* result);
  * @param offset 이동 오프셋
  * @param result 이동된 포즈를 저장할 구조체
  */
-void translate_pose(const PoseData* pose, const Point2D* offset, PoseData* result);
+void translate_pose(const PoseData *pose, const Point2D *offset,
+                    PoseData *result);
 
 /**
  * @brief 포즈를 스케일링하고 이동
@@ -123,10 +122,45 @@ void translate_pose(const PoseData* pose, const Point2D* offset, PoseData* resul
  * @param offset 이동 오프셋
  * @param result 변환된 포즈를 저장할 구조체
  */
-void transform_pose(const PoseData* pose, 
-                   float scale_factor, 
-                   const Point2D* offset, 
-                   PoseData* result);
+void transform_pose(const PoseData *pose, float scale_factor,
+                    const Point2D *offset, PoseData *result);
+
+/**
+ * @brief 캘리브레이션 데이터를 활용한 정교한 스케일 팩터 계산
+ * @param current_pose 현재 포즈
+ * @param target_pose 목표 포즈
+ * @return 계산된 스케일 팩터
+ */
+
+/**
+ * @brief 포즈가 측면인지 판단
+ * @param pose 포즈 데이터
+ * @return 측면이면 true, 정면이면 false
+ */
+bool is_side_pose(const PoseData *pose);
+
+/**
+ * @brief 개선된 스케일 팩터 계산
+ * @param current_pose 현재 포즈
+ * @param target_pose 목표 포즈
+ * @return 계산된 스케일 팩터
+ */
+float calculate_improved_scale_factor(const PoseData *current_pose,
+                                      const PoseData *target_pose);
+
+/**
+ * @brief 포즈의 높이 계산
+ * @param pose 포즈 데이터
+ * @return 포즈 높이
+ */
+float calculate_pose_height(const PoseData *pose);
+
+/**
+ * @brief 골반 너비 계산
+ * @param pose 포즈 데이터
+ * @return 골반 너비
+ */
+float calculate_hip_width(const PoseData *pose);
 
 #ifdef __cplusplus
 }
