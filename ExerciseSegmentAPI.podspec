@@ -17,12 +17,12 @@ Pod::Spec.new do |spec|
                      - Shoulder-width based scaling for exercise mode
                      DESC
 
-  spec.homepage     = "https://github.com/your-org/exercise_segment_api"
+  spec.homepage     = "https://github.com/juntaenoh/exercise_segment_api"
   spec.license      = { :type => "MIT", :file => "LICENSE" }
   spec.author       = { "Exercise Segment API Team" => "contact@exercisesegmentapi.com" }
 
   spec.platform     = :ios, "16.0"
-  spec.source       = { :path => "." }
+  spec.source       = { :git => "https://github.com/juntaenoh/exercise_segment_api.git", :tag => "#{spec.version}" }
 
   spec.source_files = [
     "include/**/*.h",
