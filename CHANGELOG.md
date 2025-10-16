@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2025-10-16
+### Changed
+- 진행도 계산 알고리즘 개선: 골반 중심 기준 상대 좌표 계산으로 변경
+- 카메라 이동에 영향받지 않는 더 정확한 진행도 측정
+- 가중 평균 방식으로 관절별 중요도 반영
+
+### Added
+- 테스트 유틸리티 추가: `check_pose_diff.c`, `test_mid_progress.c`, `test_real_json_poses.c`
+
+### Fixed
+- 세그먼트 진행도 계산 시 카메라 위치 변화에 민감하던 문제 해결
+
 ## [2.1.0] - 2025-09-17
 ### Added
 - **향상된 세그먼트 관리 API**: 더 효율적인 워크아웃 관리

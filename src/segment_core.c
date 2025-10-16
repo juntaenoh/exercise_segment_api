@@ -1431,9 +1431,11 @@ int segment_analyze_smart(const PoseData *current_pose, ScaleMode scale_mode,
       target_shoulder_width = sqrtf(dx * dx + dy * dy);
     }
 
-    scale = (target_shoulder_width > 0)
-                ? current_shoulder_width / target_shoulder_width
-                : 1.0f;
+    // 스케일 계산 후 약간 작게 조정 (90%)
+    float raw_scale = (target_shoulder_width > 0)
+                          ? current_shoulder_width / target_shoulder_width
+                          : 1.0f;
+    scale = raw_scale * 0.90f; // 10% 작게
 
   } else {
     // 측정 모드: 어깨-발목 거리 기준 (기존 방식)
