@@ -43,6 +43,10 @@ static bool g_all_segments_loaded = false; // 전체 세그먼트 로드 여부
 static int g_current_start_index = -1; // 현재 사용 중인 시작 인덱스
 static int g_current_end_index = -1;   // 현재 사용 중인 종료 인덱스
 
+// 관절 분석을 위한 전역 변수들
+static JointAnalysis g_current_joint_analysis[12]; // 현재 세그먼트의 관절 분석 결과
+static bool g_joint_analysis_ready = false; // 관절 분석 완료 여부
+
 // 에러 메시지 배열
 static const char *error_messages[] = {"Success",
                                        "System not initialized",
@@ -803,9 +807,15 @@ int segment_analyze_simple(const PoseData *current_pose, float *out_progress,
     return SEGMENT_ERROR_INVALID_POSE;
   }
 
-  // 현재 포즈와 세그먼트의 시작→종료 포즈 비교
-  float progress = calculate_segment_progress(
-      current_pose, &g_user_segment_start, &g_user_segment_end, NULL, 0);
+  // 관절 분석이 완료되었으면 분석된 정보를 사용, 아니면 기본 방식 사용
+  float progress;
+  if (g_joint_analysis_ready) {
+    progress = calculate_progress_with_analysis(current_pose, &g_user_segment_start, 
+                                               &g_user_segment_end, g_current_joint_analysis);
+  } else {
+    progress = calculate_segment_progress(current_pose, &g_user_segment_start, 
+                                        &g_user_segment_end, NULL, 0);
+  }
 
   float similarity =
       segment_calculate_similarity(current_pose, &g_user_segment_end);
@@ -1264,6 +1274,22 @@ int segment_set_current_segment(int start_index, int end_index) {
   g_segment_loaded = true;
 
   printf("✅ 세그먼트 선택 완료: %d → %d\n", start_index, end_index);
+
+  // 관절 분석 수행
+  printf("\n🔬 세그먼트 관절 분석 시작...\n");
+  int analysis_result = analyze_exercise_joints(&g_user_segment_start, 
+                                                &g_user_segment_end,
+                                                g_current_joint_analysis);
+  
+  if (analysis_result == SEGMENT_OK) {
+    g_joint_analysis_ready = true;
+    print_important_joints(g_current_joint_analysis);
+    printf("✅ 관절 분석 완료! 이제 더 정확한 진행도 계산이 가능합니다.\n");
+  } else {
+    printf("⚠️  관절 분석 실패 (에러 코드: %d), 기본 진행도 계산을 사용합니다.\n", analysis_result);
+    g_joint_analysis_ready = false;
+  }
+
   return SEGMENT_OK;
 }
 

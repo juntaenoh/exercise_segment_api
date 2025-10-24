@@ -1,1 +1,0 @@
-/usr/bin/cc  -Wall -Wextra -O3 -march=armv8-a -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/test_foot_center.dir/test_foot_center.c.o -o test_foot_center  libexercise_segment_static.a -lm

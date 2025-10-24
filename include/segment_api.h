@@ -14,6 +14,7 @@
 #define SEGMENT_API_H
 
 #include "segment_types.h"
+#include "pose_analysis.h"
 
 #ifdef __cplusplus
 extern "C" {

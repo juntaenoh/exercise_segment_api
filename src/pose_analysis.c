@@ -327,3 +327,256 @@ void calculate_correction_vectors(const PoseData *current_pose,
     // }
   }
 }
+
+// 관절 이름 매핑
+static const char* get_joint_name(JointType joint) {
+  switch (joint) {
+    case POSE_LANDMARK_LEFT_SHOULDER: return "왼쪽 어깨";
+    case POSE_LANDMARK_RIGHT_SHOULDER: return "오른쪽 어깨";
+    case POSE_LANDMARK_LEFT_ELBOW: return "왼쪽 팔꿈치";
+    case POSE_LANDMARK_RIGHT_ELBOW: return "오른쪽 팔꿈치";
+    case POSE_LANDMARK_LEFT_WRIST: return "왼쪽 손목";
+    case POSE_LANDMARK_RIGHT_WRIST: return "오른쪽 손목";
+    case POSE_LANDMARK_LEFT_HIP: return "왼쪽 골반";
+    case POSE_LANDMARK_RIGHT_HIP: return "오른쪽 골반";
+    case POSE_LANDMARK_LEFT_KNEE: return "왼쪽 무릎";
+    case POSE_LANDMARK_RIGHT_KNEE: return "오른쪽 무릎";
+    case POSE_LANDMARK_LEFT_ANKLE: return "왼쪽 발목";
+    case POSE_LANDMARK_RIGHT_ANKLE: return "오른쪽 발목";
+    default: return "알 수 없는 관절";
+  }
+}
+
+int analyze_exercise_joints(const PoseData *start_pose, 
+                           const PoseData *end_pose,
+                           JointAnalysis *joint_analysis) {
+  if (!start_pose || !end_pose || !joint_analysis) {
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("\n🔍 운동 관절 분석 시작...\n");
+  printf("========================================\n");
+
+  // 골반 중심점 계산
+  Point3D start_hip_center = {
+      (start_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.x +
+       start_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.x) / 2.0f,
+      (start_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.y +
+       start_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.y) / 2.0f,
+      (start_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.z +
+       start_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.z) / 2.0f};
+
+  Point3D end_hip_center = {
+      (end_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.x +
+       end_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.x) / 2.0f,
+      (end_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.y +
+       end_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.y) / 2.0f,
+      (end_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.z +
+       end_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.z) / 2.0f};
+
+  // 주요 관절들 분석
+  JointType main_joints[] = {
+      POSE_LANDMARK_LEFT_SHOULDER, POSE_LANDMARK_RIGHT_SHOULDER,
+      POSE_LANDMARK_LEFT_ELBOW,    POSE_LANDMARK_RIGHT_ELBOW,
+      POSE_LANDMARK_LEFT_WRIST,    POSE_LANDMARK_RIGHT_WRIST,
+      POSE_LANDMARK_LEFT_HIP,      POSE_LANDMARK_RIGHT_HIP,
+      POSE_LANDMARK_LEFT_KNEE,     POSE_LANDMARK_RIGHT_KNEE,
+      POSE_LANDMARK_LEFT_ANKLE,    POSE_LANDMARK_RIGHT_ANKLE};
+
+  int main_joint_count = sizeof(main_joints) / sizeof(main_joints[0]);
+  float max_distance = 0.0f;
+
+  // 1단계: 모든 관절의 움직임 거리 계산
+  for (int i = 0; i < main_joint_count; i++) {
+    JointType joint = main_joints[i];
+    
+    // 신뢰도 확인
+    if (start_pose->landmarks[joint].inFrameLikelihood < MIN_CONFIDENCE_THRESHOLD ||
+        end_pose->landmarks[joint].inFrameLikelihood < MIN_CONFIDENCE_THRESHOLD) {
+      joint_analysis[i].joint = joint;
+      joint_analysis[i].movement_distance = 0.0f;
+      joint_analysis[i].weight = 0.0f;
+      joint_analysis[i].is_important = false;
+      joint_analysis[i].joint_name = get_joint_name(joint);
+      continue;
+    }
+
+    // 골반 중심 기준 상대 좌표 계산
+    Point3D start_relative = {
+        start_pose->landmarks[joint].position.x - start_hip_center.x,
+        start_pose->landmarks[joint].position.y - start_hip_center.y,
+        start_pose->landmarks[joint].position.z - start_hip_center.z};
+
+    Point3D end_relative = {
+        end_pose->landmarks[joint].position.x - end_hip_center.x,
+        end_pose->landmarks[joint].position.y - end_hip_center.y,
+        end_pose->landmarks[joint].position.z - end_hip_center.z};
+
+    float distance = distance_3d(&start_relative, &end_relative);
+    
+    joint_analysis[i].joint = joint;
+    joint_analysis[i].movement_distance = distance;
+    joint_analysis[i].joint_name = get_joint_name(joint);
+    
+    if (distance > max_distance) {
+      max_distance = distance;
+    }
+  }
+
+  // 2단계: 중요 관절 판단 및 가중치 계산
+  float important_threshold = max_distance * 0.3f; // 최대 움직임의 30% 이상
+  int important_count = 0;
+
+  printf("📊 관절별 움직임 분석 결과:\n");
+  printf("----------------------------------------\n");
+
+  for (int i = 0; i < main_joint_count; i++) {
+    float distance = joint_analysis[i].movement_distance;
+    bool is_important = (distance >= important_threshold && distance > 6.0f); // 6px 이상으로 낮춤
+    
+    joint_analysis[i].is_important = is_important;
+    
+    if (is_important) {
+      joint_analysis[i].weight = distance; // 움직임 거리 = 가중치
+      important_count++;
+      printf("🔥 중요 관절: %s - %.1fpx 움직임 (가중치: %.1f)\n", 
+             joint_analysis[i].joint_name, distance, distance);
+    } else {
+      joint_analysis[i].weight = 10.0f; // 낮은 가중치
+      printf("⚪ 일반 관절: %s - %.1fpx 움직임 (가중치: 10.0)\n", 
+             joint_analysis[i].joint_name, distance);
+    }
+  }
+
+  printf("----------------------------------------\n");
+  printf("✅ 분석 완료: 총 %d개 관절 중 %d개가 중요 관절\n", 
+         main_joint_count, important_count);
+  printf("🎯 중요 관절 임계값: %.1fpx\n", important_threshold);
+  printf("========================================\n\n");
+
+  return SEGMENT_OK;
+}
+
+void print_important_joints(const JointAnalysis *joint_analysis) {
+  if (!joint_analysis) {
+    printf("❌ 관절 분석 데이터가 없습니다.\n");
+    return;
+  }
+
+  printf("\n🏆 주요 관절 요약:\n");
+  printf("==================\n");
+  
+  int important_count = 0;
+  for (int i = 0; i < 12; i++) { // 주요 관절 12개
+    if (joint_analysis[i].is_important) {
+      important_count++;
+      printf("%d. %s (%.1fpx, 가중치: %.1f)\n", 
+             important_count,
+             joint_analysis[i].joint_name,
+             joint_analysis[i].movement_distance,
+             joint_analysis[i].weight);
+    }
+  }
+  
+  if (important_count == 0) {
+    printf("⚠️  중요 관절이 없습니다. 모든 관절이 거의 움직이지 않는 운동일 수 있습니다.\n");
+  } else {
+    printf("==================\n");
+    printf("총 %d개의 주요 관절이 식별되었습니다.\n", important_count);
+  }
+  printf("\n");
+}
+
+float calculate_progress_with_analysis(const PoseData *current_pose,
+                                     const PoseData *start_pose,
+                                     const PoseData *end_pose,
+                                     const JointAnalysis *joint_analysis) {
+  if (!current_pose || !start_pose || !end_pose || !joint_analysis) {
+    return 0.0f;
+  }
+
+  // 골반 중심점 계산
+  Point3D current_hip_center = {
+      (current_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.x +
+       current_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.x) / 2.0f,
+      (current_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.y +
+       current_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.y) / 2.0f,
+      (current_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.z +
+       current_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.z) / 2.0f};
+
+  Point3D start_hip_center = {
+      (start_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.x +
+       start_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.x) / 2.0f,
+      (start_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.y +
+       start_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.y) / 2.0f,
+      (start_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.z +
+       start_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.z) / 2.0f};
+
+  Point3D end_hip_center = {
+      (end_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.x +
+       end_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.x) / 2.0f,
+      (end_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.y +
+       end_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.y) / 2.0f,
+      (end_pose->landmarks[POSE_LANDMARK_LEFT_HIP].position.z +
+       end_pose->landmarks[POSE_LANDMARK_RIGHT_HIP].position.z) / 2.0f};
+
+  float weighted_progress = 0.0f;
+  float total_weight = 0.0f;
+
+  // 분석된 관절 정보를 사용하여 진행도 계산
+  for (int i = 0; i < 12; i++) { // 주요 관절 12개
+    JointAnalysis analysis = joint_analysis[i];
+    
+    // 신뢰도 확인
+    if (current_pose->landmarks[analysis.joint].inFrameLikelihood < MIN_CONFIDENCE_THRESHOLD ||
+        start_pose->landmarks[analysis.joint].inFrameLikelihood < MIN_CONFIDENCE_THRESHOLD ||
+        end_pose->landmarks[analysis.joint].inFrameLikelihood < MIN_CONFIDENCE_THRESHOLD) {
+      continue;
+    }
+
+    // 골반 중심 기준 상대 좌표 계산
+    Point3D current_relative = {
+        current_pose->landmarks[analysis.joint].position.x - current_hip_center.x,
+        current_pose->landmarks[analysis.joint].position.y - current_hip_center.y,
+        current_pose->landmarks[analysis.joint].position.z - current_hip_center.z};
+
+    Point3D start_relative = {
+        start_pose->landmarks[analysis.joint].position.x - start_hip_center.x,
+        start_pose->landmarks[analysis.joint].position.y - start_hip_center.y,
+        start_pose->landmarks[analysis.joint].position.z - start_hip_center.z};
+
+    Point3D end_relative = {
+        end_pose->landmarks[analysis.joint].position.x - end_hip_center.x,
+        end_pose->landmarks[analysis.joint].position.y - end_hip_center.y,
+        end_pose->landmarks[analysis.joint].position.z - end_hip_center.z};
+
+    float start_to_end = distance_3d(&start_relative, &end_relative);
+    float current_to_end = distance_3d(&current_relative, &end_relative);
+
+    float ratio;
+    float weight = analysis.weight; // 미리 분석된 가중치 사용
+
+    if (analysis.is_important && start_to_end > 10.0f) {
+      // 중요 관절: 정확한 진행도 계산
+      ratio = 1.0f - (current_to_end / start_to_end);
+      ratio = fmaxf(0.0f, ratio);
+      ratio = fminf(1.0f, ratio * 2.0f); // 200% 보너스
+    } else if (analysis.is_important) {
+      // 중요 관절이지만 움직임이 적음
+      ratio = 1.0f;
+    } else {
+      // 덜 중요한 관절: 단순 유사도만 체크
+      ratio = (current_to_end < 50.0f) ? 1.0f : 0.5f;
+    }
+
+    weighted_progress += ratio * weight;
+    total_weight += weight;
+  }
+
+  if (total_weight == 0.0f) {
+    return 0.0f;
+  }
+
+  float progress = weighted_progress / total_weight;
+  return fmaxf(0.0f, fminf(1.0f, progress));
+}

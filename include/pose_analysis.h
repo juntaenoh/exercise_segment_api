@@ -83,6 +83,47 @@ void normalize_pose_center(const PoseData *input_pose,
                            const Point3D *reference_center,
                            PoseData *normalized_pose);
 
+/**
+ * @brief 관절 분석 정보 구조체
+ */
+typedef struct {
+    JointType joint;              // 관절 타입
+    float movement_distance;      // 시작→종료 거리
+    float weight;                // 가중치
+    bool is_important;           // 중요 관절 여부
+    const char* joint_name;      // 관절 이름
+} JointAnalysis;
+
+/**
+ * @brief 운동별 관절 분석 수행
+ * @param start_pose 시작 포즈
+ * @param end_pose 종료 포즈
+ * @param joint_analysis 분석 결과를 저장할 배열
+ * @return 성공 시 SEGMENT_OK
+ */
+int analyze_exercise_joints(const PoseData *start_pose, 
+                           const PoseData *end_pose,
+                           JointAnalysis *joint_analysis);
+
+/**
+ * @brief 분석된 관절 정보로 진행도 계산
+ * @param current_pose 현재 포즈
+ * @param start_pose 시작 포즈
+ * @param end_pose 종료 포즈
+ * @param joint_analysis 분석된 관절 정보
+ * @return 진행도 (0.0~1.0)
+ */
+float calculate_progress_with_analysis(const PoseData *current_pose,
+                                     const PoseData *start_pose,
+                                     const PoseData *end_pose,
+                                     const JointAnalysis *joint_analysis);
+
+/**
+ * @brief 주요 관절 로그 출력
+ * @param joint_analysis 분석된 관절 정보
+ */
+void print_important_joints(const JointAnalysis *joint_analysis);
+
 #ifdef __cplusplus
 }
 #endif
