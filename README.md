@@ -13,6 +13,7 @@ Google ML Kit으로 추출한 포즈 데이터를 기반으로 운동 동작의 
 
 ### 🆕 v2.1.0 새로운 기능
 - **향상된 세그먼트 관리**: 전체 세그먼트 미리 로드로 분석 속도 향상
+- **메모리 JSON 로드**: `segment_load_all_segments_from_json()` — Flutter asset 등 파일 경로 없이 로드
 - **사용자 위치 기준 분석**: `segment_analyze_smart()`로 사용자 위치에 맞춘 목표 포즈 반환
 - **효율적인 메모리 관리**: 세그먼트 캐싱 시스템으로 성능 최적화
 - **확장된 테스트 도구**: 다양한 체형과 상황을 테스트할 수 있는 프로그램들
@@ -59,11 +60,23 @@ int main() {
 ```
 
 #### B 이용자 (사용자) - 워크아웃 사용 (v2.1.0 권장)
+
+**권장 호출 순서**
+
+1. `segment_api_init()` — 초기화  
+2. `segment_calibrate_user(PoseData*)` — 사용자 캘리브레이션  
+3. workout JSON 로드 — 환경에 따라 아래 중 하나  
+   - 네이티브(C/iOS 파일 경로): `segment_load_all_segments(path)`  
+   - **Flutter asset(권장)**: `segment_load_all_segments_from_json(json, len)`  
+4. `segment_set_current_segment(start, end)` — 사용할 세그먼트 선택  
+5. `segment_analyze_smart(...)` — 실시간 분석  
+
+**네이티브 (JSON 파일 경로)**
+
 ```c
 #include "segment_api.h"
 
 int main() {
-    // API 초기화
     segment_api_init();
     
     // B의 기본 포즈로 캘리브레이션
@@ -77,23 +90,37 @@ int main() {
     // 실시간 분석
     while (/* 운동 진행 중 */) {
         PoseData currentPose = { /* 현재 포즈 데이터 */ };
-        
         float progress, similarity;
         bool is_complete;
         Point3D corrections[POSE_LANDMARK_COUNT];
         PoseData targetPose;
-        
-        segment_analyze_smart(&currentPose, &progress, &similarity, 
-                             &is_complete, corrections, &targetPose);
-        
-        printf("진행도: %.2f, 완료: %s, 유사도: %.2f\n", 
+
+        segment_analyze_smart(&currentPose, SCALE_MODE_EXERCISE,
+                              1080.0f, 1920.0f,
+                              &progress, &similarity, &is_complete,
+                              corrections, &targetPose);
+
+        printf("진행도: %.2f, 완료: %s, 유사도: %.2f\n",
                progress, is_complete ? "예" : "아니오", similarity);
     }
-    
+
     segment_api_cleanup();
     return 0;
 }
 ```
+
+**메모리 JSON (Flutter asset / 임베디드 버퍼)**
+
+```c
+// json: UTF-8 바이트 버퍼, json_len: 길이 (null 종료 불필요)
+int rc = segment_load_all_segments_from_json(json_bytes, json_len);
+if (rc != SEGMENT_OK) { /* 오류 처리 */ }
+
+segment_set_current_segment(0, 1);
+// 이후 segment_analyze_smart() 동일
+```
+
+Flutter에서는 `exercise_segment_flutter` 패키지의 FFI(`loadAllSegmentsFromJsonBytes`)로 위 API를 호출합니다. 자세한 예시는 아래 [Flutter 사용법](#-flutter-사용법)을 참고하세요.
 
 ## 🧪 테스트 프로그램들
 
@@ -117,9 +144,10 @@ int main() {
 - `segment_api_cleanup()`: API 정리
 
 #### 향상된 세그먼트 관리 API (v2.1.0)
-- `segment_load_all_segments()`: JSON 파일에서 모든 세그먼트 미리 로드
-- `segment_set_current_segment()`: 미리 로드된 세그먼트 중 선택
-- `segment_analyze_smart()`: 사용자 위치 기준 목표 포즈 반환
+- `segment_load_all_segments(const char *json_file_path)`: JSON **파일 경로**에서 모든 세그먼트 미리 로드
+- `segment_load_all_segments_from_json(const char *json, size_t json_len)`: JSON **메모리 버퍼**에서 로드 (Flutter asset 권장, `segment_calibrate_user()` 선행 필요)
+- `segment_set_current_segment(int start_index, int end_index)`: `segment_load_all_segments*` 로드 후 세그먼트 선택
+- `segment_analyze_smart(...)`: 사용자 위치 기준 목표 포즈 반환
 - `segment_get_segment_info()`: 세그먼트 정보 조회
 
 #### A 이용자 (기록자) API
@@ -146,24 +174,76 @@ cmake .. && make
 
 ### 플랫폼별 빌드
 
-#### iOS
+#### Android (NDK)
+
+프로젝트 루트의 스크립트로 빌드·Flutter 패키지 복사까지 한 번에 수행합니다 (16KB 페이지 정렬 포함).
+
 ```bash
-cmake -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 ..
-make
+chmod +x android_build_script.sh
+./android_build_script.sh
 ```
 
-#### Android (NDK)
+산출물: `build-android/libexercise_segment.so` → `exercise_segment_flutter/android/src/main/jniLibs/arm64-v8a/`
+
+수동 빌드 예시:
+
 ```bash
 cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
-      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-21 ..
-make
+      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-35 ..
+cmake --build . -j
 ```
+
+#### iOS (정적 라이브러리)
+
+```bash
+chmod +x ios_build_script.sh
+./ios_build_script.sh
+```
+
+산출물을 `exercise_segment_flutter/ios/Native/`에 반영한 뒤 iOS 앱을 다시 빌드하세요.
 
 #### Windows (Visual Studio)
 ```cmd
 cmake -G "Visual Studio 16 2019" -A x64 ..
 cmake --build . --config Release
 ```
+
+## 📱 Flutter 사용법
+
+Flutter asset은 앱 번들 안에 있어 **파일 시스템 경로로 `segment_load_all_segments()`를 쓰기 어렵습니다.**  
+`rootBundle`으로 읽은 바이트를 `segment_load_all_segments_from_json()`에 넘기는 방식을 권장합니다.
+
+### 권장 호출 순서
+
+1. `segment_api_init()` (Dart: FFI 래퍼 초기화 시 자동/명시)  
+2. `segment_calibrate_user(pose)`  
+3. `segment_load_all_segments_from_json(json, len)` — asset 바이트  
+4. `segment_set_current_segment(start, end)`  
+5. `segment_analyze_smart(...)` 등 분석 API  
+
+### Dart 예시 (`exercise_segment_flutter`)
+
+```dart
+import 'package:flutter/services.dart' show rootBundle;
+import 'dart:typed_data';
+
+Future<void> loadWorkoutFromAsset(ExerciseSegmentFfi api, String assetPath) async {
+  final ByteData bd = await rootBundle.load(assetPath);
+  final Uint8List bytes = bd.buffer.asUint8List(bd.offsetInBytes, bd.lengthInBytes);
+
+  final code = api.loadAllSegmentsFromJsonBytes(bytes);
+  if (code != 0) {
+    throw Exception('loadAllSegmentsFromJsonBytes failed: $code');
+  }
+
+  api.setCurrentSegment(0, 1);
+}
+```
+
+네이티브 `.so` / 정적 라이브러리를 수정한 뒤에는 **앱 완전 재빌드**가 필요합니다 (hot reload만으로는 FFI 심볼이 갱신되지 않을 수 있음).
+
+- Android: `./android_build_script.sh` 실행 후 Flutter 앱 재빌드  
+- iOS: `./ios_build_script.sh` 실행 후 `exercise_segment_flutter/ios/Native/` 갱신 확인  
 
 ## 📱 Swift 사용법
 
