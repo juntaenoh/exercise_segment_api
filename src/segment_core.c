@@ -1093,7 +1093,7 @@ static int load_all_poses_from_json(const char *json_file_path,
   return SEGMENT_OK;
 }
 
-int segment_load_all_segments_from_json(const char *json_file_path) {
+int segment_load_all_segments(const char *json_file_path) {
   if (!g_initialized) {
     printf("❌ API 초기화 안됨\n");
     return SEGMENT_ERROR_NOT_INITIALIZED;
