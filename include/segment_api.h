@@ -15,6 +15,7 @@
 
 #include "pose_analysis.h"
 #include "segment_types.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -167,6 +168,17 @@ int segment_create_pose_data(const PoseLandmark *landmarks, PoseData *out_pose);
  * 있습니다. segment_calibrate_user()가 먼저 호출되어야 합니다.
  */
 int segment_load_all_segments(const char *json_file_path);
+
+/**
+ * @brief 메모리 상의 JSON 문자열에서 모든 세그먼트를 미리 로드 (Flutter asset용)
+ * @param json UTF-8 JSON 버퍼 (null 종료 필요 없음)
+ * @param json_len json 버퍼 길이(바이트)
+ * @return SEGMENT_OK 성공, 음수 에러 코드
+ *
+ * Flutter asset은 파일 경로로 직접 열 수 없으므로, Dart에서 읽은 바이트를 이 함수로
+ * 전달합니다. segment_calibrate_user()가 먼저 호출되어야 합니다.
+ */
+int segment_load_all_segments_from_json(const char *json, size_t json_len);
 
 /**
  * @brief 미리 로드된 세그먼트에서 현재 사용할 세그먼트 선택

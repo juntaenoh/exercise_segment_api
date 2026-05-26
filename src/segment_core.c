@@ -934,59 +934,26 @@ PoseLandmark get_pose_landmark(PoseData *pose, int index) {
 // MARK: - 향상된 세그먼트 관리 API 구현 (v2.1.0)
 
 /**
- * @brief JSON 파일에서 모든 포즈를 한 번에 로드하는 내부 함수
+ * @brief null 종료 JSON 버퍼에서 모든 포즈를 파싱 (buffer 소유권은 호출자)
  */
-static int load_all_poses_from_json(const char *json_file_path,
-                                    PoseData **out_poses, int *out_pose_count) {
-  if (!json_file_path || !out_poses || !out_pose_count) {
-    printf("❌ 전체 JSON 로드 실패: NULL 포인터\n");
+static int parse_all_poses_from_json_buffer(char *buffer,
+                                            PoseData **out_poses,
+                                            int *out_pose_count) {
+  if (!buffer || !out_poses || !out_pose_count) {
+    printf("❌ 전체 JSON 파싱 실패: NULL 포인터\n");
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
-
-  // JSON 파일 로드 시작 (로그 최소화)
-
-  FILE *file = fopen(json_file_path, "r");
-  if (!file) {
-    printf("❌ JSON 파일 열기 실패: %s\n", json_file_path);
-    return SEGMENT_ERROR_MEMORY_ALLOCATION;
-  }
-
-  // 파일 크기 확인
-  fseek(file, 0, SEEK_END);
-  long file_size = ftell(file);
-  fseek(file, 0, SEEK_SET);
-
-  char *buffer = malloc(file_size + 1);
-  if (!buffer) {
-    fclose(file);
-    printf("❌ JSON 파일용 메모리 할당 실패\n");
-    return SEGMENT_ERROR_MEMORY_ALLOCATION;
-  }
-
-  size_t bytes_read = fread(buffer, 1, file_size, file);
-  buffer[bytes_read] = '\0';
-  fclose(file);
-
-  if (bytes_read == 0) {
-    printf("❌ JSON 파일이 비어있음: %s\n", json_file_path);
-    free(buffer);
-    return SEGMENT_ERROR_INVALID_PARAMETER;
-  }
-
-  // JSON 파일 읽기 완료
 
   // poses 배열 찾기
   char *poses_start = strstr(buffer, "\"poses\"");
   if (!poses_start) {
     printf("❌ JSON에서 'poses' 배열을 찾을 수 없음\n");
-    free(buffer);
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
 
   char *array_start = strchr(poses_start, '[');
   if (!array_start) {
     printf("❌ JSON에서 'poses' 배열 시작점 '[' 를 찾을 수 없음\n");
-    free(buffer);
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
 
@@ -1026,7 +993,6 @@ static int load_all_poses_from_json(const char *json_file_path,
 
   if (pose_count == 0) {
     printf("❌ JSON에서 유효한 포즈를 찾을 수 없음\n");
-    free(buffer);
     return SEGMENT_ERROR_INVALID_PARAMETER;
   }
 
@@ -1036,7 +1002,6 @@ static int load_all_poses_from_json(const char *json_file_path,
   PoseData *poses = malloc(pose_count * sizeof(PoseData));
   if (!poses) {
     printf("❌ 포즈 배열 메모리 할당 실패\n");
-    free(buffer);
     return SEGMENT_ERROR_MEMORY_ALLOCATION;
   }
 
@@ -1078,8 +1043,6 @@ static int load_all_poses_from_json(const char *json_file_path,
     }
   }
 
-  free(buffer);
-
   if (parsed_count == 0) {
     printf("❌ 파싱된 포즈가 없음\n");
     free(poses);
@@ -1090,6 +1053,88 @@ static int load_all_poses_from_json(const char *json_file_path,
 
   *out_poses = poses;
   *out_pose_count = parsed_count;
+  return SEGMENT_OK;
+}
+
+static int load_all_poses_from_json_buffer(const char *json, size_t json_len,
+                                           PoseData **out_poses,
+                                           int *out_pose_count) {
+  if (!json || json_len == 0 || !out_poses || !out_pose_count) {
+    printf("❌ JSON 버퍼 로드 실패: 잘못된 인자\n");
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  char *buffer = malloc(json_len + 1);
+  if (!buffer) {
+    printf("❌ JSON 버퍼용 메모리 할당 실패\n");
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  memcpy(buffer, json, json_len);
+  buffer[json_len] = '\0';
+
+  int result = parse_all_poses_from_json_buffer(buffer, out_poses, out_pose_count);
+  free(buffer);
+  return result;
+}
+
+static int load_all_poses_from_json_file(const char *json_file_path,
+                                         PoseData **out_poses,
+                                         int *out_pose_count) {
+  if (!json_file_path || !out_poses || !out_pose_count) {
+    printf("❌ JSON 파일 로드 실패: NULL 포인터\n");
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  FILE *file = fopen(json_file_path, "r");
+  if (!file) {
+    printf("❌ JSON 파일 열기 실패: %s\n", json_file_path);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  fseek(file, 0, SEEK_END);
+  long file_size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  if (file_size <= 0) {
+    fclose(file);
+    printf("❌ JSON 파일이 비어있음: %s\n", json_file_path);
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  char *buffer = malloc((size_t)file_size + 1);
+  if (!buffer) {
+    fclose(file);
+    printf("❌ JSON 파일용 메모리 할당 실패\n");
+    return SEGMENT_ERROR_MEMORY_ALLOCATION;
+  }
+
+  size_t bytes_read = fread(buffer, 1, (size_t)file_size, file);
+  buffer[bytes_read] = '\0';
+  fclose(file);
+
+  int result =
+      parse_all_poses_from_json_buffer(buffer, out_poses, out_pose_count);
+  free(buffer);
+  return result;
+}
+
+static int apply_all_loaded_segments(PoseData *ideal_poses, int pose_count) {
+  if (g_user_segments) {
+    free(g_user_segments);
+    g_user_segments = NULL;
+  }
+  g_total_segment_count = 0;
+  g_all_segments_loaded = false;
+
+  g_user_segments = ideal_poses;
+  g_total_segment_count = pose_count;
+  g_all_segments_loaded = true;
+  g_current_start_index = -1;
+  g_current_end_index = -1;
+
+  printf("STEP 3: 이상적 포즈 저장 완료 (개별 관절 조정은 분석 시 수행)\n");
+  printf("RESULT: 운동 데이터 준비 완료 (%d개 포즈)\n", pose_count);
   return SEGMENT_OK;
 }
 
@@ -1111,39 +1156,46 @@ int segment_load_all_segments(const char *json_file_path) {
 
   printf("STEP 1: 운동 데이터 로드 중...\n");
 
-  // 기존에 로드된 세그먼트가 있다면 해제
-  if (g_user_segments) {
-    free(g_user_segments);
-    g_user_segments = NULL;
-  }
-  g_total_segment_count = 0;
-  g_all_segments_loaded = false;
-
-  // JSON에서 모든 포즈 로드
   PoseData *ideal_poses = NULL;
   int pose_count = 0;
-  int result =
-      load_all_poses_from_json(json_file_path, &ideal_poses, &pose_count);
+  int result = load_all_poses_from_json_file(json_file_path, &ideal_poses,
+                                           &pose_count);
   if (result != SEGMENT_OK) {
     printf("❌ JSON에서 포즈 로드 실패: 에러 코드 %d\n", result);
     return result;
   }
 
-  // 이상적 포즈를 그대로 저장 (전체 스케일링 제거, 개별 관절 조정은
-  // smart_pose_fit에서 수행)
-  g_user_segments =
-      ideal_poses; // ideal_poses를 직접 사용 (메모리 해제하지 않음)
-  ideal_poses = NULL; // 소유권 이전, free하지 않도록 NULL 설정
+  return apply_all_loaded_segments(ideal_poses, pose_count);
+}
 
-  printf("STEP 3: 이상적 포즈 저장 완료 (개별 관절 조정은 분석 시 수행)\n");
+int segment_load_all_segments_from_json(const char *json, size_t json_len) {
+  if (!g_initialized) {
+    printf("❌ API 초기화 안됨\n");
+    return SEGMENT_ERROR_NOT_INITIALIZED;
+  }
 
-  g_total_segment_count = pose_count;
-  g_all_segments_loaded = true;
-  g_current_start_index = -1;
-  g_current_end_index = -1;
+  if (!g_user_calibrated) {
+    printf("❌ 사용자 캘리브레이션 안됨\n");
+    return SEGMENT_ERROR_CALIBRATION_FAILED;
+  }
 
-  printf("RESULT: 운동 데이터 준비 완료 (%d개 포즈)\n", pose_count);
-  return SEGMENT_OK;
+  if (!json) {
+    printf("❌ JSON 버퍼가 NULL\n");
+    return SEGMENT_ERROR_INVALID_PARAMETER;
+  }
+
+  printf("STEP 1: 운동 데이터 로드 중...\n");
+
+  PoseData *ideal_poses = NULL;
+  int pose_count = 0;
+  int result =
+      load_all_poses_from_json_buffer(json, json_len, &ideal_poses, &pose_count);
+  if (result != SEGMENT_OK) {
+    printf("❌ JSON에서 포즈 로드 실패: 에러 코드 %d\n", result);
+    return result;
+  }
+
+  return apply_all_loaded_segments(ideal_poses, pose_count);
 }
 
 int segment_set_current_segment(int start_index, int end_index) {
